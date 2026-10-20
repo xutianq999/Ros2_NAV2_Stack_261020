@@ -308,7 +308,8 @@ Super-LIO 的 `save_map_dir` 是**后缀**，不是绝对路径；写成 `/tmp/f
 ## 7. 参考
 
 - Super-LIO 论文：<https://arxiv.org/abs/2509.05723>
-- Super-LIO 上游：<https://github.com/Liansheng-Wang/Super-LIO>
+- Super-LIO DOI：<https://doi.org/10.1109/LRA.2026.3653372>
+- Super-LIO 上游（ROS 2 分支）：<https://github.com/Liansheng-Wang/Super-LIO/tree/ros2>
 - FAST-LIO2：<https://github.com/hku-mars/FAST_LIO>
 - Point-LIO：<https://github.com/hku-mars/Point-LIO>
 - 本仓库 Super-LIO 接入说明：[`src/super_lio/README.md`](../src/super_lio/README.md)

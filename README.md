@@ -1256,6 +1256,35 @@ ros2 topic echo /safety/estop_active --once
 本仓库自有代码（`super_lio_bridge`、`nav2_safety`、`grid_mapper`、`web`、
 `me_nav2_bringup` 等）采用 [MIT License](./LICENSE)。
 
+### Super-LIO 上游
+
+本仓库的 Super-LIO 链路依赖以下上游项目与资料：
+
+- **代码仓库（ROS 2 分支）**：<https://github.com/Liansheng-Wang/Super-LIO/tree/ros2>
+- **论文**：*Super-LIO: A Robust and Efficient LiDAR-Inertial Odometry System with a
+  Compact Mapping Strategy*，RA-L 2026
+  - arXiv：<https://arxiv.org/abs/2509.05723>
+  - DOI：<https://doi.org/10.1109/LRA.2026.3653372>
+- **许可**：GPLv3。本仓库不包含 Super-LIO 核心代码，只通过 ROS 话题/TF 与它交互；
+  桥接层 `super_lio_bridge` 为本仓库自有 MIT 代码。
+
+如果你在研究中使用了本栈，请同时引用 Super-LIO 论文：
+
+```bibtex
+@article{wang2026superlio,
+  title   = {Super-LIO: A Robust and Efficient LiDAR-Inertial Odometry System with a Compact Mapping Strategy},
+  author  = {Wang, Liansheng and Zhang, Xinke and Li, Chenhui and He, Dongjiao and Pan, Yihan and Yi, Jianjun},
+  journal = {IEEE Robotics and Automation Letters},
+  year    = {2026},
+  volume  = {11},
+  number  = {3},
+  pages   = {2666--2673},
+  doi     = {10.1109/LRA.2026.3653372}
+}
+```
+
+### 其他第三方组件
+
 第三方组件保留各自许可证：
 
 - [Super-LIO](https://github.com/Liansheng-Wang/Super-LIO) — GPLv3，独立工作空间，不包含在本仓库；

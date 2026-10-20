@@ -371,6 +371,7 @@ cd scripts
 
 This project is built on the following open-source projects:
 
+- [Super-LIO](https://github.com/Liansheng-Wang/Super-LIO/tree/ros2) - LiDAR-inertial odometry with OctVox compact mapping, HKNN correspondence search, and built-in relocalization (GPLv3, external workspace; see the [RA-L 2026 paper](https://arxiv.org/abs/2509.05723))
 - [FAST-LIO2](https://github.com/hku-mars/FAST_LIO) - Tightly coupled LiDAR-IMU odometry
 - [Point-LIO](https://github.com/hku-mars/Point-LIO) - High-bandwidth LiDAR-IMU odometry
 - [Nav2](https://github.com/ros-planning/navigation2) - ROS 2 navigation framework
@@ -379,6 +380,21 @@ This project is built on the following open-source projects:
 - [SLAM Toolbox](https://github.com/SteveMacenski/slam_toolbox) - 2D SLAM
 - [Livox SDK2](https://github.com/Livox-SDK/Livox-SDK2) - Livox LiDAR SDK
 - [Sophus](https://github.com/strasdat/Sophus) - Lie group C++ library
+
+If you use this stack in research, please also cite the Super-LIO paper:
+
+```bibtex
+@article{wang2026superlio,
+  title   = {Super-LIO: A Robust and Efficient LiDAR-Inertial Odometry System with a Compact Mapping Strategy},
+  author  = {Wang, Liansheng and Zhang, Xinke and Li, Chenhui and He, Dongjiao and Pan, Yihan and Yi, Jianjun},
+  journal = {IEEE Robotics and Automation Letters},
+  year    = {2026},
+  volume  = {11},
+  number  = {3},
+  pages   = {2666--2673},
+  doi     = {10.1109/LRA.2026.3653372}
+}
+```
 
 ## 9. License
 
