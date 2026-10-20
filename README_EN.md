@@ -1,5 +1,10 @@
 # Lidar_nav2_ws
 
+> **Note:** this English document describes the earlier FAST-LIO2-based stack.
+> The current, maintained manual for the Super-LIO + Nav2 + Web workbench stack is
+> [`README.md`](./README.md) (Chinese), with a detailed
+> [Super-LIO vs FAST-LIO2 comparison](./docs/FASTLIO2_COMPARISON.md).
+
 A ROS 2-based 3D LiDAR autonomous navigation system
 
 [![ROS2](https://img.shields.io/badge/ROS2-Humble-22313F?logo=ros)](https://docs.ros.org/en/humble/)

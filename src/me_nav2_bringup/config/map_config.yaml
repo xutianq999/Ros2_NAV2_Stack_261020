@@ -7,13 +7,11 @@
 #   - 绝对路径：直接使用，可指向包外的任意位置
 
 # 全局重定位（KISS-Matcher / small_gicp）配准用的 3D 点云地图
-# 2026-10-19 探索建图产出（386,015 点，0.15 m 降采样），与下面的 2D 图同一坐标系
-#prior_pcd_file: "/home/demo/livox_ws/src/dufomap/pointcloud-map-studio/cloud.pcd"
-prior_pcd_file: "/home/demo/Lidar_nav2_ws-main/Lidar_nav2_ws/web_backend_data/workspaces/ws_1_default/prior_pcd/explore_20261019_155735.pcd"
+# 仓库不包含大体积 PCD；请把建图产出的点云放到 src/me_nav2_bringup/pcd/，
+# 或改成你自己的绝对路径。首次使用可先跑 mapping 模式生成地图。
+prior_pcd_file: "pcd/map.pcd"
 
 # Nav2 地图服务器加载的 2D 栅格地图 yaml（对应 .pgm 路径写在该 yaml 内）
-# 0.005 分辨率的 0831.yaml 会导致 costmap 膨胀到 34M 格, RViz 渲染卡顿, 换用 0.05 版本
-# 2026-10-19 地图：已清除孤立黑点，并统一为 0/205/254 三值；
-# free_thresh=0.196 保证 205（未知）仍载入为 unknown，不会被当成可通行
-#map_yaml_file: "/home/demo/map830_r05.yaml"
-map_yaml_file: "/home/demo/Lidar_nav2_ws-main/Lidar_nav2_ws/web_backend_data/workspaces/ws_1_default/maps/migrated/explore_20261019_155735.yaml"
+# 仓库内附带的示例地图（仅用于跑通流程，实际部署请换成现场地图）：
+#   src/me_nav2_bringup/map/nav_test_4_27_from_pcd.yaml
+map_yaml_file: "map/nav_test_4_27_from_pcd.yaml"

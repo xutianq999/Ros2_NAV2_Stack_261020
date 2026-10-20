@@ -46,3 +46,8 @@ dist/
 .codex/
 .claude/
 CLAUDE.md
+# 旧 LIO 链路的建图/日志数据
+src/localization/FAST_LIO/PCD/
+src/localization/FAST_LIO/Log/
+src/localization/point_lio/PCD/
+src/localization/point_lio/Log/
