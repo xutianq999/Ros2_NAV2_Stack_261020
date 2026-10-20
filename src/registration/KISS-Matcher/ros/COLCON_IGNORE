@@ -1,0 +1,2 @@
+This optional KISS-Matcher-SAM and visualization package requires CMake 3.24.
+The workspace uses global_relocalization_kiss_matcher for real-robot relocalization.

@@ -1,0 +1,421 @@
+<?xml version="1.0"?>
+<robot name="gld_robot_description">
+
+  <!-- ==================== Materials ==================== -->
+  <material name="chassis_dark">
+    <color rgba="0.16 0.18 0.21 1.0"/>
+  </material>
+
+  <material name="chassis_plate">
+    <color rgba="0.32 0.35 0.38 1.0"/>
+  </material>
+
+  <material name="industrial_accent">
+    <color rgba="0.95 0.48 0.08 1.0"/>
+  </material>
+
+  <material name="tech_cyan">
+    <color rgba="0.10 0.70 0.85 1.0"/>
+  </material>
+
+  <material name="metal_aluminum">
+    <color rgba="0.75 0.78 0.82 1.0"/>
+  </material>
+
+  <material name="tire_rubber">
+    <color rgba="0.08 0.08 0.09 1.0"/>
+  </material>
+
+  <material name="wheel_rim">
+    <color rgba="0.45 0.48 0.52 1.0"/>
+  </material>
+
+  <material name="lidar_body">
+    <color rgba="0.12 0.13 0.15 1.0"/>
+  </material>
+
+  <material name="lidar_lens">
+    <color rgba="0.02 0.05 0.12 0.95"/>
+  </material>
+
+  <material name="camera_body">
+    <color rgba="0.22 0.24 0.26 1.0"/>
+  </material>
+
+  <material name="camera_lens">
+    <color rgba="0.05 0.45 0.75 0.95"/>
+  </material>
+
+
+  <!-- ==================== Base Footprint ==================== -->
+  <link name="base_footprint"/>
+
+  <joint name="base_to_chassis" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="chassis"/>
+    <origin xyz="0.0 0.0 0.06" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ==================== Chassis ==================== -->
+  <link name="chassis">
+    <!-- 主车体 -->
+    <visual>
+      <origin xyz="0.0 0.0 0.07" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.56 0.38 0.14"/>
+      </geometry>
+      <material name="chassis_dark"/>
+    </visual>
+
+    <!-- 顶部载物面板 -->
+    <visual>
+      <origin xyz="0.0 0.0 0.145" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.52 0.34 0.015"/>
+      </geometry>
+      <material name="chassis_plate"/>
+    </visual>
+
+    <!-- 前保险杠与防撞梁 -->
+    <visual>
+      <origin xyz="0.29 0.0 0.06" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.04 0.36 0.07"/>
+      </geometry>
+      <material name="industrial_accent"/>
+    </visual>
+
+    <!-- 后保险杠 -->
+    <visual>
+      <origin xyz="-0.29 0.0 0.06" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.04 0.36 0.07"/>
+      </geometry>
+      <material name="chassis_dark"/>
+    </visual>
+
+    <!-- 侧面机甲饰条（左/右） -->
+    <visual>
+      <origin xyz="0.0 0.195 0.07" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.48 0.015 0.05"/>
+      </geometry>
+      <material name="industrial_accent"/>
+    </visual>
+    <visual>
+      <origin xyz="0.0 -0.195 0.07" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.48 0.015 0.05"/>
+      </geometry>
+      <material name="industrial_accent"/>
+    </visual>
+
+    <!-- 雷达安装铝型材支柱 -->
+    <visual>
+      <origin xyz="0.0 0.0 0.20" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.018" length="0.10"/>
+      </geometry>
+      <material name="metal_aluminum"/>
+    </visual>
+
+    <collision>
+      <origin xyz="0.0 0.0 0.08" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.60 0.44 0.16"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="15.0"/>
+      <origin xyz="0 0 0.08"/>
+      <inertia ixx="0.25" ixy="0.0" ixz="0.0" iyy="0.45" iyz="0.0" izz="0.60"/>
+    </inertial>
+  </link>
+
+  <!-- ==================== Wheels ==================== -->
+  <!-- 左前轮 -->
+  <link name="left_top_wheel">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.10" length="0.06"/>
+      </geometry>
+      <material name="tire_rubber"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0.01 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.065" length="0.045"/>
+      </geometry>
+      <material name="wheel_rim"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.10" length="0.06"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_top_wheel_joint" type="fixed">
+    <parent link="chassis"/>
+    <child link="left_top_wheel"/>
+    <origin xyz="0.18 0.23 0.04" rpy="0 0 0"/>
+  </joint>
+
+  <!-- 右前轮 -->
+  <link name="right_top_wheel">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.10" length="0.06"/>
+      </geometry>
+      <material name="tire_rubber"/>
+    </visual>
+    <visual>
+      <origin xyz="0 -0.01 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.065" length="0.045"/>
+      </geometry>
+      <material name="wheel_rim"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.10" length="0.06"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_top_wheel_joint" type="fixed">
+    <parent link="chassis"/>
+    <child link="right_top_wheel"/>
+    <origin xyz="0.18 -0.23 0.04" rpy="0 0 0"/>
+  </joint>
+
+  <!-- 左后轮 -->
+  <link name="left_back_wheel">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.10" length="0.06"/>
+      </geometry>
+      <material name="tire_rubber"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0.01 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.065" length="0.045"/>
+      </geometry>
+      <material name="wheel_rim"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.10" length="0.06"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_back_wheel_joint" type="fixed">
+    <parent link="chassis"/>
+    <child link="left_back_wheel"/>
+    <origin xyz="-0.18 0.23 0.04" rpy="0 0 0"/>
+  </joint>
+
+  <!-- 右后轮 -->
+  <link name="right_back_wheel">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.10" length="0.06"/>
+      </geometry>
+      <material name="tire_rubber"/>
+    </visual>
+    <visual>
+      <origin xyz="0 -0.01 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.065" length="0.045"/>
+      </geometry>
+      <material name="wheel_rim"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.10" length="0.06"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_back_wheel_joint" type="fixed">
+    <parent link="chassis"/>
+    <child link="right_back_wheel"/>
+    <origin xyz="-0.18 -0.23 0.04" rpy="0 0 0"/>
+  </joint>
+
+
+  <!-- ==================== Livox MID-360 LiDAR ==================== -->
+  <link name="livox_frame">
+    <!-- 雷达底座 -->
+    <visual>
+      <origin xyz="0.0 0.0 -0.015" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.038" length="0.03"/>
+      </geometry>
+      <material name="lidar_body"/>
+    </visual>
+    <!-- 雷达光学透镜罩 -->
+    <visual>
+      <origin xyz="0.0 0.0 0.012" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.034" length="0.024"/>
+      </geometry>
+      <material name="lidar_lens"/>
+    </visual>
+    <!-- 顶部科技标识圈 -->
+    <visual>
+      <origin xyz="0.0 0.0 0.025" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.028" length="0.003"/>
+      </geometry>
+      <material name="tech_cyan"/>
+    </visual>
+
+    <collision>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.04" length="0.06"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="chassis_to_livox_frame" type="fixed">
+    <parent link="chassis"/>
+    <child link="livox_frame"/>
+    <origin xyz="0.0 0.0 0.26" rpy="0 0 0"/>
+  </joint>
+
+
+  <!-- ==================== Camera Links ==================== -->
+  <!-- Realsense D456_1 (前置主相机) -->
+  <link name="D456_1_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.025 0.09 0.025"/>
+      </geometry>
+      <material name="camera_body"/>
+    </visual>
+    <visual>
+      <origin xyz="0.012 0.0 0.0" rpy="0 1.5708 0"/>
+      <geometry>
+        <cylinder radius="0.008" length="0.003"/>
+      </geometry>
+      <material name="camera_lens"/>
+    </visual>
+  </link>
+  <joint name="chassis_to_D456_1" type="fixed">
+    <parent link="chassis"/>
+    <child link="D456_1_link"/>
+    <origin xyz="0.27 0.0 0.12" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Realsense D456_2 (后置相机) -->
+  <link name="D456_2_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.025 0.09 0.025"/>
+      </geometry>
+      <material name="camera_body"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.012 0.0 0.0" rpy="0 1.5708 0"/>
+      <geometry>
+        <cylinder radius="0.008" length="0.003"/>
+      </geometry>
+      <material name="camera_lens"/>
+    </visual>
+  </link>
+  <joint name="chassis_to_D456_2" type="fixed">
+    <parent link="chassis"/>
+    <child link="D456_2_link"/>
+    <origin xyz="-0.27 0.0 0.12" rpy="0 0 3.14159"/>
+  </joint>
+
+  <!-- Realsense D405_1 (左侧近景相机) -->
+  <link name="D405_1_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.045 0.02"/>
+      </geometry>
+      <material name="camera_body"/>
+    </visual>
+  </link>
+  <joint name="chassis_to_D405_1" type="fixed">
+    <parent link="chassis"/>
+    <child link="D405_1_link"/>
+    <origin xyz="0.10 0.18 0.11" rpy="0 0 1.5708"/>
+  </joint>
+
+  <!-- Realsense D405_2 (右侧近景相机) -->
+  <link name="D405_2_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.045 0.02"/>
+      </geometry>
+      <material name="camera_body"/>
+    </visual>
+  </link>
+  <joint name="chassis_to_D405_2" type="fixed">
+    <parent link="chassis"/>
+    <child link="D405_2_link"/>
+    <origin xyz="0.10 -0.18 0.11" rpy="0 0 -1.5708"/>
+  </joint>
+
+  <!-- Orbbec Gemini (1, 2, 3) -->
+  <link name="orbbec_gemini_1_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.025 0.08 0.025"/>
+      </geometry>
+      <material name="camera_body"/>
+    </visual>
+  </link>
+  <joint name="chassis_to_orbbec_gemini_1" type="fixed">
+    <parent link="chassis"/>
+    <child link="orbbec_gemini_1_link"/>
+    <origin xyz="0.25 0.08 0.16" rpy="0 0 0"/>
+  </joint>
+
+  <link name="orbbec_gemini_2_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.025 0.08 0.025"/>
+      </geometry>
+      <material name="camera_body"/>
+    </visual>
+  </link>
+  <joint name="chassis_to_orbbec_gemini_2" type="fixed">
+    <parent link="chassis"/>
+    <child link="orbbec_gemini_2_link"/>
+    <origin xyz="0.25 -0.08 0.16" rpy="0 0 0"/>
+  </joint>
+
+  <link name="orbbec_gemini_3_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.025 0.08 0.025"/>
+      </geometry>
+      <material name="camera_body"/>
+    </visual>
+  </link>
+  <joint name="chassis_to_orbbec_gemini_3" type="fixed">
+    <parent link="chassis"/>
+    <child link="orbbec_gemini_3_link"/>
+    <origin xyz="-0.25 0.0 0.16" rpy="0 0 3.14159"/>
+  </joint>
+
+</robot>

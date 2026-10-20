@@ -1,0 +1,47 @@
+# twist_mux 优先级仲裁
+#
+# 注意：twist_mux 4.3.0 的 `cmd_vel_out` 参数对发布器不生效（实测：参数设为某个
+# 名字，实际广播的仍是 `cmd_vel_out`）。输出话题只能在 launch 里用 remap 改名，
+# 见 launch/safety_layer_launch.py 中的 ('cmd_vel_out', 'cmd_vel_muxed')。
+#
+# 优先级分层（数值越大越优先）：
+#   255  硬急停锁     —— 锁住一切，包括遥控
+#   100  遥控         —— 人工接管
+#    50  看门狗锁     —— 只锁住比它低的（即自动驾驶），遥控不受影响
+#    10  自动驾驶     —— Nav2 经过碰撞监控后的输出
+
+twist_mux:
+  ros__parameters:
+    topics:
+      navigation:
+        topic: /cmd_vel_nav_checked
+        timeout: 0.5
+        priority: 10
+      # 恢复行为（backup/spin/smart_recovery）的专用通道，经 recovery_guard 方向性
+      # 把关。优先级高于 navigation：恢复行为运行时导航控制器已被中止，
+      # 同时有两路指令时应以脱困为准。仍低于遥控(100)，且同样被两把锁挡住。
+      recovery:
+        topic: /cmd_vel_recovery_checked
+        timeout: 0.5
+        priority: 20
+      teleop:
+        # 网页控制台 / gui_teleop 的遥控话题。启用本安全层前这两个发布者用的
+        # 是 /cmd_vel，需要一并改到本话题，见 docs/ENABLING.md。
+        topic: /cmd_vel_teleop
+        timeout: 0.5
+        priority: 100
+
+    locks:
+      # 定位/里程计看门狗。true = 锁住自动驾驶。
+      # timeout 用 0.0：这是状态锁存而非心跳，由看门狗以 20Hz 持续发布当前状态。
+      autonomy_blocked:
+        topic: /safety/autonomy_blocked
+        timeout: 0.0
+        priority: 50
+      # 硬急停。true = 锁住一切。锁的是 estop_latch 节点持续发布的锁存状态
+      # （不是 /safety/estop 那条一次性指令），这样仲裁层重启后锁也还在。
+      # 触发：向 /safety/estop 发 std_msgs/Bool true（网页急停按钮就是这么做）。
+      estop:
+        topic: /safety/estop_active
+        timeout: 0.0
+        priority: 255

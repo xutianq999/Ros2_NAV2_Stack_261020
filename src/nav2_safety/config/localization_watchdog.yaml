@@ -1,0 +1,38 @@
+# 定位/里程计健康看门狗
+#
+# 检查项不健康时向 /safety/autonomy_blocked 发布 true（= 锁住自动驾驶）。
+# 只掐自动驾驶，不掐遥控：定位丢失时操作员仍能用遥控把车开回可重定位的位置。
+
+localization_watchdog:
+  ros__parameters:
+    publish_rate: 20.0
+
+    # TF 检查项：年龄取自 TF 自身时间戳
+    #   odom -> base_footprint  来自 LIO（lio_interface / sensor_scan_generation）
+    #   map  -> odom            来自重定位节点（small_gicp / KISS-Matcher）
+    tf_checks: ['map->odom', 'odom->base_footprint']
+    # 阈值要小于各自的正常发布周期（LIO 约 10Hz，重定位约 1-5Hz）留够余量
+    tf_timeouts: [1.0, 1.0]
+
+    # 点云话题检查项（PointCloud2）
+    pointcloud_checks: ['/registered_scan']
+    pointcloud_timeouts: [1.0]
+
+    # 布尔状态检查项（Bool）：收到 false 或超时没有消息都算不健康。
+    # 这项盯的是重定位节点的**跟踪健康度**，用来发现 TF 新鲜度发现不了的失效：
+    # GICP 跟丢时不会更新位姿，map->odom 却还在按上一次的位姿继续发布，
+    # 于是"TF 一直很新鲜"但底盘已经拿着一个错的位姿在走。
+    #
+    # ⚠ 该话题由 small_gicp_relocalization 发布（nav2_real.sh 的默认重定位就是它）。
+    #   如果你改用 KISS-Matcher 全局重定位且它不发布这个话题，这里会一直判定为
+    #   不健康、自动驾驶被永久锁住。届时请把 bool_checks 置空，或让 KISS 节点也
+    #   发布同名话题。
+    bool_checks: ['/localization/tracking_ok']
+    bool_timeouts: [2.0]
+
+    # 启动宽限：刚上电时 LIO 和重定位都还没收敛，强行判定会刷一堆错误日志。
+    # 注意宽限期内是按"锁住"发布的，不会误放行自动驾驶。
+    startup_grace: 5.0
+
+    autonomy_blocked_topic: /safety/autonomy_blocked
+    status_topic: /safety/watchdog_status

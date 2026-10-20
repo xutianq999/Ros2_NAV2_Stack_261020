@@ -1,0 +1,44 @@
+voice_agent_node:
+  ros__parameters:
+    # 手动运动输出。auto = 检测到 twist_mux（/cmd_vel_teleop 有订阅者）时走
+    # 遥控输入，否则直接走 /cmd_vel。显式指定可避免自动判断。
+    cmd_vel_topic: auto
+    odom_topic: /wheel_odom
+    scan_topic: /scan
+
+    # /scan 障碍门控（collision_monitor 只约束导航，不约束遥控/语音手动运动）
+    # 假设 /scan 的 angle=0 指向车头 +x；雷达安装方向不同请调整或关闭本门控。
+    use_scan_guard: true
+    require_scan_for_motion: false
+    scan_stop_distance: 0.35
+    scan_front_half_angle_deg: 35.0
+    scan_timeout: 0.5
+
+    # 速度与动作上限
+    max_linear_speed: 0.25
+    max_angular_speed: 0.8
+    default_linear_speed: 0.15
+    default_angular_speed: 0.5
+    default_forward_distance: 0.5
+    default_backward_distance: 0.3
+    default_turn_angle_deg: 45.0
+    max_distance_m: 2.0
+    max_turn_angle_deg: 180.0
+    odom_timeout: 0.5
+
+    # 航点文件；留空时自动查找 me_nav2_bringup/config/waypoints.yaml
+    waypoints_file: ""
+    frame_id: map
+
+    # 安全层话题
+    estop_topic: /safety/estop
+    estop_active_topic: /safety/estop_active
+    autonomy_blocked_topic: /safety/autonomy_blocked
+
+    # 节点频率
+    status_rate: 2.0
+    motion_rate: 20.0
+
+    # HTTP 服务（也可用环境变量 HOST/PORT 覆盖）
+    host: 0.0.0.0
+    port: 8000

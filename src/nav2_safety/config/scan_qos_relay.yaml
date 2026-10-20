@@ -1,0 +1,15 @@
+# /scan 的 QoS 中继：Best Effort -> Reliable
+#
+# pointcloud_to_laserscan 发 /scan 用 SensorDataQoS（Best Effort），而 Nav2
+# costmap_2d 的 obstacle_layer 用 Reliable 订阅，两者不兼容（启动日志会报
+# "requesting incompatible QoS ... RELIABILITY_QOS_POLICY"），代价地图实际
+# 收不到扫描数据。本节点把同一份消息用 Reliable 重新发到 /scan_reliable，
+# nav2_params.yaml 里两份 costmap 的 obstacle_layer.scan.topic 指向它。
+#
+# collision_monitor / recovery_guard 仍直接订阅 /scan，不需要经过本节点。
+
+scan_qos_relay:
+  ros__parameters:
+    input_topic: /scan
+    output_topic: /scan_reliable
+    qos_depth: 5

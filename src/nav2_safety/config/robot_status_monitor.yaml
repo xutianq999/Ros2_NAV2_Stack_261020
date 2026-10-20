@@ -1,0 +1,59 @@
+# 机器人实时状态聚合（只读）
+#
+# 输出：
+#   /robot/status          std_msgs/String，JSON，2 Hz，transient_local
+#   /robot/status_markers  visualization_msgs/MarkerArray，机器人上方文字
+#
+# 状态优先级：
+#   ESTOP > STARTING/SAFETY_LOCK > RECOVERING > STUCK > NAVIGATING
+#         > EXPLORING > EXPLORE_DONE > IDLE
+
+robot_status_monitor:
+  ros__parameters:
+    publish_rate: 2.0
+
+    # “卡住”判据：导航 active + 有速度指令 + 连续这么久没有进展。
+    # 比 controller_server 的 progress checker（0.25 m / 15 s）略短，
+    # 让界面先提示，而不是等 BT 已经 abort 才看到。
+    stuck_timeout: 12.0
+    # 里程碑：XY 位移超过它，或 yaw 变化超过 yaw_progress_epsilon，算有进展。
+    progress_epsilon: 0.05
+    yaw_progress_epsilon: 0.2
+
+    # 速度指令新鲜度 / 非零阈值
+    cmd_timeout: 0.5
+    cmd_linear_threshold: 0.02
+    cmd_angular_threshold: 0.1
+
+    # 观测新鲜度
+    # 导航状态变化或当前目标 feedback 均可刷新；探索状态是锁存事件，不设过期。
+    nav_status_timeout: 2.5
+    odom_timeout: 0.5
+    scan_timeout: 1.0
+    # 看门狗启动宽限期内 autonomy_blocked 本来就是 true，显示"启动中"而不是故障。
+    startup_grace: 8.0
+
+    # cmd_vel_nav_smoothed 非零、cmd_vel_nav_checked 连续为零超过该时长，
+    # 判为 collision_monitor 在停车（贴墙/障碍）。
+    collision_stop_time: 0.5
+
+    # RViz 文字 marker
+    publish_marker: true
+    marker_frame: base_footprint
+    marker_height: 1.1
+
+    # 电池 / BMS（/bunker_status 由 bunker_base 发布）
+    # BUNKER 的 BunkStatus 里 battery_soc 来自 CAN BMS 帧；部分固件不发 BMS 帧，
+    # 此时 soc=0，节点会按下面的电压区间估算，并在 JSON 里标记 source=voltage。
+    battery_topic: /bunker_status
+    battery_timeout: 2.0
+    battery_low_soc: 20.0
+    battery_critical_soc: 10.0
+    # 满电/空电电压（V）：Mini 2.0 的实际值请以说明书为准，再按实测调整。
+    # 默认按 7S 锂电（29.4V 满 / 21.0V 空）填写；若为 6S 请改为 25.2 / 19.8。
+    battery_voltage_full: 29.4
+    battery_voltage_empty: 21.0
+    # 充电电流判定：current * sign >= threshold 视为充电。
+    # BMS 常用负电流表示充电，所以默认 sign=-1、threshold=0.2。
+    battery_charge_current_sign: -1.0
+    battery_charge_current_threshold: 0.2

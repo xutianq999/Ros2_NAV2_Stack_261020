@@ -1,0 +1,10 @@
+frame: map
+annotations:
+- id: 1
+  text: 实验室
+  x: 3.548
+  y: 8.5
+  yaw: 0.0
+  color: '#2563eb'
+  size: 14.0
+  map: src/me_nav2_bringup/map/explore_20261019_155735.yaml

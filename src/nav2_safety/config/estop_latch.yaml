@@ -1,0 +1,16 @@
+# 软件急停锁存
+#
+# 把一次性急停指令 /safety/estop 锁存成持续发布、transient_local 的
+# /safety/estop_active，供 twist_mux 的锁和网页界面读取。
+# 这样后加入的订阅者、以及重启后的仲裁层都能立刻拿到当前锁存状态。
+# 原因详见 nav2_safety/estop_latch.py 文件头。
+
+estop_latch:
+  ros__parameters:
+    input_topic: /safety/estop
+    output_topic: /safety/estop_active
+    status_topic: /safety/estop_status
+    publish_rate: 2.0
+    # 锁存状态落盘：节点崩溃被 respawn 后会恢复已触发的急停，而不是静默解除。
+    # 用 /tmp 是刻意的：重启机器后清空，重新上电默认未触发。
+    state_file: /tmp/nav2_safety_estop.state

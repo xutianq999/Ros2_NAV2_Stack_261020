@@ -1,0 +1,23 @@
+# 仅作用于脱困通道。普通导航仍使用 collision_monitor。
+# 已经贴近的障碍允许保持间隙或远离；禁止继续缩小间隙或穿入车体。
+# 与 behavior_server.smart_recovery 的扫描几何和间隙参数保持一致。
+recovery_guard:
+  ros__parameters:
+    input_topic: /cmd_vel_recovery
+    output_topic: /cmd_vel_recovery_checked
+    scan_topic: /scan
+    base_frame: base_footprint
+    blocked_topic: /safety/recovery_blocked
+    half_length: 0.345
+    half_width: 0.285
+    min_clearance: 0.025
+    min_points: 2
+    # 所有运动均检查未来 0.5s 的整车扫掠；近障时等比例降速，保持弧线。
+    lookahead_time: 0.5
+    min_linear: 0.02
+    min_angular: 0.04
+    scan_timeout: 0.5
+    input_timeout: 0.3
+    publish_rate: 20.0
+    max_linear: 0.15
+    max_angular: 0.8

@@ -1,0 +1,29 @@
+# 速度指令兜底归零（可选组件）
+#
+# ⚠ 重要性说明：BUNKER 用户手册 Q&A 明确写了，底盘在超过 500ms 收不到下一帧 CAN
+#   控制指令时会进入通讯保护、速度为 0。也就是说"发布者挂掉"这个场景底盘本来就
+#   会自己处理。本节点只把停车从 500ms 缩短到 300ms（0.26 m/s 下约 5cm），并让
+#   停车不依赖固件配置。属于锦上添花，不是安全底线，可以不起。
+#
+#   我最初断言"底盘会保留最后一条运动指令继续行驶"是错的——当时只核了 ROS 节点
+#   没有超时保护，没去查固件就下了结论。详见 README。
+#
+# 它仍然成立的一点：twist_mux 在输入超时/被锁挡住时是"静默"而非下发零速，本节点
+# 把静默换成显式零速，让停车行为不依赖固件的超时实现。
+
+cmd_vel_deadman:
+  ros__parameters:
+    input_topic: /cmd_vel_muxed
+    # 输出直接落到底盘订阅的 /cmd_vel：底盘驱动把该话题硬编码在 C++ 里，不想为接
+    # 安全层改底盘代码。因此启用本层后 /cmd_vel 必须由本节点独占，遥控发布者要
+    # 迁移到 /cmd_vel_teleop。本节点会自检 /cmd_vel 上的外来发布者并报错。
+    output_topic: /cmd_vel
+    # 静默多久就判定为"上游已停"，开始持续下发零速。
+    # 比 twist_mux 的 topic timeout(0.5s) 略短，保证一旦上游断流能尽快停车。
+    timeout: 0.3
+    publish_rate: 50.0
+    status_topic: /safety/deadman_status
+    # 布尔状态（true = 正在下发零速），网页安全面板订阅它
+    stopping_topic: /safety/deadman_stopping
+    # 检查 /cmd_vel 上有没有本节点之外的发布者（秒）
+    foreign_publisher_check_period: 2.0

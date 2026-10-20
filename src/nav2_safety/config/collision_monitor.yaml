@@ -1,0 +1,59 @@
+# Nav2 碰撞监控（nav2_collision_monitor）
+#
+# 位置：插在 Nav2 的速度平滑器和仲裁层之间，**只约束自动驾驶**的指令流。
+# 它独立于 controller_server 的代价地图判断做最后一道检查：即使规划器给出了
+# 一条会撞上障碍的轨迹，这里也会按真实车身预测并减速/停车。
+#
+#   cmd_vel_in  : /cmd_vel_nav_smoothed  （velocity_smoother 的输出）
+#   cmd_vel_out : /cmd_vel_nav_checked   （交给 twist_mux 当 navigation 输入）
+#
+# 只用 FootprintApproach 一个区域。它按当前速度（含角速度）逐步模拟未来
+# 1 秒的真实车身轮廓，只有"车身真的会撞上"才拦，因此是方向相关的：
+# 沿墙平移、倒车远离障碍都不会被误停。以前的 StopZone/SlowZone 是方向无关的
+# 固定矩形，车贴墙时墙一直落在矩形里，直行、倒车、转向都会被零速覆盖，
+# 这正是 2026-10-18/19 两次"车没卡却被判卡住"的直接原因。
+#
+# ⚠ 轮廓来自 /local_costmap/published_footprint，与 nav2_params.yaml 保持一致。
+#   0.26 m/s 下 1.0 s 预测前探约 0.26 m，制动距离约 1.4 cm，余量充足；
+#   如果之后放大 max_vel_x，请同步加大 time_before_collision。
+
+collision_monitor:
+  ros__parameters:
+    base_frame_id: base_footprint
+    odom_frame_id: odom
+    cmd_vel_in_topic: /cmd_vel_nav_smoothed
+    cmd_vel_out_topic: /cmd_vel_nav_checked
+
+    # 超过这个时间没有收到观测源数据，就认为源失效并停车
+    source_timeout: 1.0
+    # TF 查询允许的最大延迟
+    transform_tolerance: 0.3
+    # 机器人移动时，按位姿变化修正多边形的落点，避免快速旋转时漏判
+    base_shift_correction: true
+    # 触发停车后，继续发布零速的时长（覆盖底盘驱动可能的重发周期）
+    stop_pub_timeout: 2.0
+
+    polygons: ["FootprintApproach"]
+
+    FootprintApproach:
+      type: polygon
+      action_type: approach
+      footprint_topic: /local_costmap/published_footprint
+      # 预测窗口：0.26 m/s 下约 0.26 m 前探，覆盖系统延迟和打滑。
+      time_before_collision: 1.0
+      simulation_time_step: 0.1
+      # 允许最多 5 个扫描点落在轮廓内才触发，滤掉单点噪声/墙面毛刺。
+      max_points: 5
+      visualize: false
+      enabled: true
+
+    # 观测源：复用 3D→2D 切片出来的 /scan。
+    # 3D 点云本身（/registered_scan）也可以直接接进来（type: pointcloud 配
+    # min_height/max_height），好处是不依赖切片节点存活，代价是 CPU 更高。
+    # 这里默认只用 /scan；想加一路真正的 3D 冗余，把下面的 pointcloud 段
+    # enabled 打开并加入 observation_sources 即可。
+    observation_sources: ["scan"]
+    scan:
+      type: scan
+      topic: /scan
+      enabled: true

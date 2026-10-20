@@ -1,0 +1,9 @@
+# 语音 Agent 的 HTTP/语音层依赖。
+# 建议在带 --system-site-packages 的虚拟环境里安装，这样仍能 import rclpy。
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+openai>=1.60.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+PyYAML>=6.0.0

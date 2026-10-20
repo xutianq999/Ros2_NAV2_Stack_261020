@@ -1,0 +1,34 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="4" name="NavigateRecovery">
+      <PipelineSequence name="NavigateWithReplanning">
+        <RateController hz="1.0">
+          <RecoveryNode number_of_retries="2" name="ComputePathToPose">
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+        <RecoveryNode number_of_retries="1" name="FollowPath">
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+          <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+        </RecoveryNode>
+      </PipelineSequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <!-- Every recovery attempt starts with checked motion. RoundRobin kept
+             its position across frontier preemptions, leaving a later obstacle
+             with only clearing/waiting before the retry budget ran out. -->
+        <Sequence name="RecoveryAttempt">
+          <Fallback name="CheckedMotionRecovery">
+            <BackUp server_name="smart_recovery" backup_dist="0.50" backup_speed="0.10" time_allowance="35.0"/>
+            <!-- Both motion actions still pass through recovery_guard. -->
+            <BackUp backup_dist="0.15" backup_speed="0.08" time_allowance="5.0"/>
+            <Wait wait_duration="2"/>
+          </Fallback>
+          <ClearEntireCostmap name="ClearAfterRecoveryLocal" service_name="local_costmap/clear_entirely_local_costmap"/>
+          <ClearEntireCostmap name="ClearAfterRecoveryGlobal" service_name="global_costmap/clear_entirely_global_costmap"/>
+        </Sequence>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

@@ -1,0 +1,13 @@
+<library path="me_nav2_bringup_plugins">
+  <class name="me_nav2_bringup/SmartRecovery" type="me_nav2_bringup::SmartRecovery" base_class_type="nav2_core::Behavior">
+    <description>
+      短轨迹脱困：直退和缓弯优先，完整车身扫掠检查，位姿反馈纠偏和有限重规划。
+    </description>
+  </class>
+  <class name="me_nav2_bringup/StallAwareBackUp" type="me_nav2_bringup::StallAwareBackUp" base_class_type="nav2_core::Behavior">
+    <description>Nav2 BackUp with a deadline for lack of actual motion.</description>
+  </class>
+  <class name="me_nav2_bringup/StallAwareSpin" type="me_nav2_bringup::StallAwareSpin" base_class_type="nav2_core::Behavior">
+    <description>Nav2 Spin with a deadline for lack of actual rotation.</description>
+  </class>
+</library>

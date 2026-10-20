@@ -1,0 +1,509 @@
+# =====================================================================
+# Nav2 完整配置文件 (Humble 版本)
+# 包含：BT Navigator, Controller, Planner, Smoother, Behaviors, 
+# Costmaps (Global & Local), Map Server, Waypoint Follower, Velocity Smoother
+# =====================================================================
+
+# 行为树导航配置
+bt_navigator:
+  ros__parameters:
+    use_sim_time: False
+    global_frame: map                  # BT导航器所使用的全局坐标系
+    robot_base_frame: base_footprint   # 机器人基座坐标系
+    odom_topic: /odom                  # 里程计话题名称
+    # Humble 读的是 default_nav_to_pose_bt_xml（旧名 default_bt_xml_filename 会被忽略）。
+    # 默认值就是上游自带的树（和之前不写这个键时的行为一致）；探索启动会通过
+    # bt_xml 参数把它改写成 behavior_trees/ 下的探索专用树。
+    # 键必须存在：RewrittenYaml 只改已有的键，不会新增。
+    default_nav_to_pose_bt_xml: "/opt/ros/humble/share/nav2_bt_navigator/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml"
+    # 加载BT所需要用到的各种动作和条件插件库
+
+
+# 局部规划器
+controller_server:
+  ros__parameters:
+    use_sim_time: False
+    controller_frequency: 20.0        # 控制器运行的频率（Hz），即向底盘发cmd_vel的频率
+    min_x_velocity_threshold: 0.001   # X方向最小速度阈值（避免极小值导致电机抖动）
+    min_y_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.3            # 允许控制器规划失败的时间（秒），超过此时间上报失败给BT
+    progress_checker_plugin: "progress_checker" # 进度检查器插件，用于判断机器人是否“卡住”
+    goal_checker_plugins: ["general_goal_checker"] # 目标到达检查器插件
+    controller_plugins: ["FollowPath"] # 加载的控制器插件列表
+
+    # 进度检查器配置
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      # 原地对准/贴墙微调不会产生 0.5 m 的 XY 位移，原来的 0.5 m / 10 s
+      # 会在狭窄空间里误判"卡住"、反复触发恢复。放宽到 0.25 m / 15 s。
+      required_movement_radius: 0.25  # 机器人必须在这个时间内移动的半径（米）
+      movement_time_allowance: 15.0   # 允许不移动的最长时间（秒）
+
+    # 目标到达检查器配置
+    general_goal_checker:
+      stateful: True
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.15          # 到达目标的XY坐标允许误差（米），放宽以避免终点前反复微调
+      yaw_goal_tolerance: 0.2618       # 15度 到达目标的角度允许误差（弧度）
+
+    # 局部控制器：MPPI（Model Predictive Path Integral）
+    #
+    # 从 DWB 换成 MPPI 的原因：DWB 是采样-打分式的传统方法，滑移转向机器人在它下面
+    # 容易出现震荡（原配置甚至要专门挂一个 Oscillation critic 去压）。MPPI 通过大量
+    # 轨迹采样 + 加权平均直接优化出一条平滑、连续的控制序列，对非完整约束更友好，
+    # 是 Nav2 当前推荐的控制器。
+    #
+    # 参数按本车限制适配：vx_max/wz_max 与 velocity_smoother 的 max_velocity 保持一致
+    # （0.4 m/s、1.0 rad/s），否则两层限制不一致会导致减速被反复裁剪。
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+      # 采样规模：时间步长 × 步数 = 预测时域。56 × 0.05s = 2.8s
+      # batch_size 取 1000（官方示例常用 2000）：控制器跑在 20Hz 上，
+      # 采样量过大会让单周期计算超时，反而变差。
+      time_steps: 56
+      model_dt: 0.05
+      batch_size: 1000
+      iteration_count: 1
+
+      # 采样噪声标准差：越大探索越激进
+      vx_std: 0.2
+      vy_std: 0.2
+      wz_std: 0.4
+
+      # 速度/转向限制（与 velocity_smoother 保持一致）
+      vx_max: 0.4
+      vx_min: -0.4           # 允许倒车（本车 min_vel_x 一直是负的）
+      vy_max: 0.0            # 差速/滑移转向不需要横向速度
+      wz_max: 1.0
+
+      prune_distance: 1.7
+      transform_tolerance: 0.1
+      temperature: 0.3
+      gamma: 0.015
+      motion_model: "DiffDrive"
+      visualize: false
+
+      TrajectoryVisualizer:
+        trajectory_step: 5
+        time_step: 3
+
+      critics: ["ConstraintCritic", "ObstaclesCritic", "GoalCritic", "GoalAngleCritic",
+                "PathAlignCritic", "PathFollowCritic", "PathAngleCritic", "PreferForwardCritic"]
+
+      # 运动学约束（加速度、转向角限制）
+      ConstraintCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 4.0
+
+      # 障碍避让。consider_footprint 必须开：本车轮廓是 0.69×0.57 的矩形，
+      # 关掉的话只按中心点判碰撞，会明显低估车角扫过的区域。
+      ObstaclesCritic:
+        enabled: true
+        cost_power: 1
+        repulsion_weight: 3.0
+        critical_weight: 20.0
+        consider_footprint: true
+        collision_cost: 10000.0
+        collision_margin_distance: 0.15
+        near_goal_distance: 0.5
+        inflation_radius: 0.4      # 0.5 在窄门/小房间会堵死，回到 0.4
+        cost_scaling_factor: 2.5   # 与局部代价地图一致，扩大高代价带
+
+      GoalCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        threshold_to_consider: 1.4
+
+      GoalAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.0
+        threshold_to_consider: 0.5
+
+      # 贴合全局路径
+      PathAlignCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 16.0
+        max_path_occupancy_ratio: 0.05
+        trajectory_point_step: 4
+        threshold_to_consider: 0.5
+        offset_from_furthest: 20
+        use_path_orientations: false
+
+      PathFollowCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        offset_from_furthest: 5
+        threshold_to_consider: 1.4
+
+      PathAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.0
+        offset_from_furthest: 4
+        threshold_to_consider: 0.5
+        max_angle_to_furthest: 1.0
+        mode: 0
+
+      # 抑制无谓的倒车：只在确实需要（比如卡住）时才允许
+      PreferForwardCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        threshold_to_consider: 0.5
+
+# # 局部代价地图配置
+# local_costmap:
+#   local_costmap:
+#     ros__parameters:
+#       update_frequency: 5.0           # 代价地图更新频率（Hz）
+#       publish_frequency: 2.0          # 发布代价地图给RViz显示的频率
+#       global_frame: odom              # 局部代价地图的全局坐标系通常是odom
+#       robot_base_frame: base_footprint
+#       use_sim_time: False
+#       rolling_window: true            # 是否使用滑动窗口（机器人始终在地图中心）
+#       width: 3                        # 局部地图宽度（米）
+#       height: 3                       # 局部地图高度（米）
+#       resolution: 0.05                # 地图分辨率（米/像素）
+#       footprint: "[ [0.345, 0.285], [0.345, -0.285], [-0.345, -0.285], [-0.345, 0.285] ]" # 机器人轮廓，用于避障碰撞检测
+#       plugins: ["voxel_layer", "inflation_layer"] # 局部地图加载的层
+#       footprint_clearing_enabled: true
+#       combination_method: 1
+      
+#       # 障碍物层（体素层，支持3D点云，也可只用2D雷达）
+#       voxel_layer:
+#         plugin: "nav2_costmap_2d::VoxelLayer"
+#         enabled: True
+#         publish_voxel_map: True
+#         origin_z: 0.0
+#         z_resolution: 0.05
+#         z_voxels: 16
+#         max_obstacle_height: 2.0      # 超过此高度的障碍物不考虑
+#         mark_threshold: 0             # 判定为障碍物的击中次数阈值
+#         observation_sources: scan     # 数据源，下面会定义scan的具体参数
+#         scan:
+#           topic: /scan                # 雷达话题
+#           max_obstacle_height: 2.0
+#           clearing: True              # 是否能够清除已移动走的障碍物
+#           marking: True               # 是否能标记新障碍物
+#           data_type: "LaserScan"      # 数据类型
+#           raytrace_range: 5.0         # 用于清除视野内障碍物的最大光线追踪距离
+#           obstacle_range: 2.5         # 将障碍物插入代价地图的最大距离
+#           inf_is_valid: true
+
+#       # 膨胀层：在障碍物周围加上一层缓冲区，防止机器人擦边碰撞
+#       inflation_layer:
+#         plugin: "nav2_costmap_2d::InflationLayer"
+#         cost_scaling_factor: 3.0      # 距离障碍物越远，代价值下降的速度（越大下降越快）
+#         inflation_radius: 0.55        # 最大膨胀半径（米）
+
+# # 全局代价地图配置
+# global_costmap:
+#   global_costmap:
+#     ros__parameters:
+#       update_frequency: 1.0           # 全局代价地图更新不需要太快
+#       publish_frequency: 1.0
+#       global_frame: map               # 全局代价地图依赖静态地图
+#       robot_base_frame: base_footprint
+#       use_sim_time: False
+#       robot_radius: 0.22              # 简化机器人为圆形（如果设置了footprint，此项无效）
+#       resolution: 0.05
+#       track_unknown_space: true       # 是否追踪未知空间（用于探索）
+#       plugins: ["static_layer", "obstacle_layer", "inflation_layer"] # 全局地图图层
+#       footprint_clearing_enabled: true
+#       combination_method: 1
+      
+#       # 静态地图层（接收 map_server 提供的数据）
+#       static_layer:
+#         plugin: "nav2_costmap_2d::StaticLayer"
+#         map_subscribe_transient_local: True # QOS设置，确保能接收到迟来的地图话题
+      
+#       # 全局障碍物层
+#       obstacle_layer:
+#         plugin: "nav2_costmap_2d::ObstacleLayer"
+#         enabled: True
+#         observation_sources: scan
+#         scan:
+#           topic: /scan
+#           max_obstacle_height: 2.0
+#           clearing: True
+#           marking: True
+#           data_type: "LaserScan"
+#           raytrace_range: 5.0
+#           obstacle_range: 2.5
+          
+#       inflation_layer:
+#         plugin: "nav2_costmap_2d::InflationLayer"
+#         cost_scaling_factor: 3.0
+#         inflation_radius: 0.55
+
+# 局部代价地图
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 20.0          # 20Hz 刷新，告别残留拖影
+      publish_frequency: 10.0         # 对应提高可视化发布频率
+      global_frame: odom              # 保持 odom 保证局部里程计平滑
+      robot_base_frame: base_footprint
+      use_sim_time: False
+      rolling_window: true
+      width: 6                        # 保持 5x5 米的开阔局部窗口
+      height: 6
+      resolution: 0.05    # 分辨率为5cm
+      footprint: "[ [0.345, 0.285], [0.345, -0.285], [-0.345, -0.285], [-0.345, 0.285] ]"
+      plugins: ["obstacle_layer", "inflation_layer"] # 彻底采用纯平面层接2D scan
+      footprint_clearing_enabled: true    # 开启局部地图轮廓清理
+      combination_method: 1
+      always_send_full_costmap: True  # 开启全图发送，确保RViz显示同步无丢包
+      
+      # 纯平面障碍物层
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          # costmap 用 Reliable 订阅，而 /scan 的发布端是 Best Effort。
+          # 直接订阅 /scan 会 QoS 不兼容、一帧都收不到；/scan_reliable 是
+          # scan_qos_relay 转出来的 Reliable 副本。
+          topic: /scan_reliable
+          data_type: "LaserScan"
+          max_obstacle_height: 2.0
+          min_obstacle_height: 0.0
+          clearing: True  # 清除旧障碍物
+          marking: True   # 标记新障碍物
+          obstacle_max_range: 2.5         # 障碍物插入距离
+          raytrace_max_range: 20.0        # 大幅放宽光线追踪距离，保证远处空旷时也能拉出长射线
+          inf_is_valid: true          # 致命关键：必须将 inf 视为有效空旷数据触发清除
+
+      # 膨胀层
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 2.5  # 代价衰减因子：越小，高代价带越宽，路径越靠中间
+        inflation_radius: 0.4    # 0.5 在窄门/小房间会堵死，回到 0.4
+
+# 全局代价地图
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 5.0           # 全局5Hz
+      publish_frequency: 2.0
+      global_frame: map
+      robot_base_frame: base_footprint
+      use_sim_time: False
+      footprint: "[ [0.345, 0.285], [0.345, -0.285], [-0.345, -0.285], [-0.345, 0.285] ]"
+      resolution: 0.05
+      track_unknown_space: true
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      footprint_clearing_enabled: true
+      combination_method: 1
+      always_send_full_costmap: True
+      
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True
+        # 注意：Nav2 的 StaticLayer 会把 lethal_cost_threshold 钳到 [0, 100]，
+        # 所以写 101 实际仍按 100 处理，/map 的占据格（100）永远映射成
+        # LETHAL(254)，无法通过这个参数改成 INSCRIBED(253)。而且 Smac 的
+        # 栅格检查把 >=253 都当不可通行、InflationLayer 又只从 254 播种，
+        # 即便得到 253 也不会带来可通行性。车陷进禁行区时由 SmartRecovery
+        # 的“允许 blocked 起点、但不许代价变差”逻辑脱困，不依赖这里。
+        lethal_cost_threshold: 100
+      
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          # 同 local_costmap：必须用 Reliable 的 /scan_reliable。
+          topic: /scan_reliable
+          data_type: "LaserScan"
+          max_obstacle_height: 2.0
+          min_obstacle_height: 0.0
+          clearing: True
+          marking: True
+          obstacle_max_range: 10.0        # 全局层看到更远的 /scan 障碍，弥补静态图的漏检
+          raytrace_max_range: 20.0        # 同步拉长全局射线清理距离
+          inf_is_valid: true          # 补齐全局层面的幽灵残留清理
+          
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        # 膨胀代价 = 252·exp(-scale·(d-footprint_radius))，超过 inflation_radius 直接截成 0。
+        # 0.8m：在保持路径走中间（梯度引导 A*）和避免"起点致命空间"误判之间取平衡。
+        # 比机器人半长（0.345m）+ 0.455m 余量，探索时定位微漂或靠墙不会直接判死，
+        # 开阔导航时仍有足够梯度让路径保持居中。
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.8
+
+# 静态地图服务器配置
+map_server:
+  ros__parameters:
+    use_sim_time: False
+    yaml_filename: "map.yaml"         # 要加载的静态地图文件路径（后续通过Launch传入实际路径）
+
+# 全局规划服务器
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 20.0  # 全局规划器被期望的运行频率
+    use_sim_time: False
+    planner_plugins: ["GridBased"]    # 加载规划器插件
+    
+    GridBased:
+      # 从 NavFn(Dijkstra) 换成 Smac 2D 规划器。
+      # 选 SmacPlanner2D 而不是 Hybrid/Lattice：它是 NavFn 的直接替换，同样是 2D
+      # 栅格 A*，但代价函数可调、对膨胀代价的利用更合理，路径更贴合可通行区域；
+      # Hybrid/Lattice 是运动学可行规划，能给出带倒车的路径，但需要标定
+      # minimum_turning_radius 等参数，风险大得多，这里不引入。
+      plugin: "nav2_smac_planner/SmacPlanner2D"
+      tolerance: 0.5                  # 终点容忍距离，终点在障碍物内时允许就近选点
+      downsample_costmap: false
+      downsampling_factor: 1
+      # 探索场景必须允许路径穿过未知区域，否则 frontier 目标经常会被
+      # “no valid path”拒绝。墙/遮挡消失的问题已由 Super-LIO blind=0.4
+      # 和 grid_mapper 命中免疫修复，不再依赖这个开关兜底。
+      allow_unknown: true
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      # 探索后期地图会长到 1700x1800 格以上，2 s 会出现
+      # "failed to create plan, exceeded maximum iterations"。
+      max_planning_time: 5.0
+      # 越大越倾向于绕开高代价（靠近障碍物）区域
+      cost_travel_multiplier: 5.0
+      use_final_approach_orientation: false
+
+# 路径平滑服务器
+#
+# ⚠ 注意：这套配置目前**不会被调用**。
+#   默认行为树 navigate_to_pose_w_replanning_and_recovery.xml 里没有 SmoothPath
+#   节点（我查过：SmoothPath 出现 0 次），所以 smoother_server 只是起来待着，
+#   规划出的全局路径不会经过它。
+#
+#   为什么先留着而不是删掉：nav2_params.yaml 同时被安全版启动
+#   (nav2_safety/safe_nav_bringup_launch.py) 和回滚用的原版启动
+#   (me_nav2_bringup/my_nav2_launch.py，走 nav2_bringup 的 navigation_launch.py)
+#   读取，而后者会无条件启动 smoother_server。直接删掉这段参数有让回滚路径
+#   激活失败的风险。要清理的话，请连同两处启动文件里的 smoother_server 一起移除。
+#
+#   另外换成 MPPI 之后平滑的意义更小了：MPPI 直接优化出平滑的控制序列，
+#   不再像 DWB 那样需要事后平滑全局路径。
+smoother_server:
+  ros__parameters:
+    use_sim_time: False
+    smoother_plugins: ["SimpleSmoother"]
+    SimpleSmoother:
+      plugin: "nav2_smoother::SimpleSmoother" # 基于数学曲线的简单平滑器
+      tolerance: 1.0e-10              # 平滑迭代收敛容差
+      max_its: 1000                   # 最大迭代次数
+      do_refinement: True             # 是否在平滑后增加航点密度
+
+# 恢复行为服务器配置
+behavior_server:
+  ros__parameters:
+    costmap_topic: local_costmap/costmap_raw # 恢复行为所需的代价地图数据源
+    footprint_topic: local_costmap/published_footprint
+    cycle_frequency: 10.0
+    behavior_plugins: ["spin", "backup", "drive_on_heading", "wait", "smart_recovery"] # 注册行为插件
+
+    spin: # 原地旋转行为配置
+      plugin: "me_nav2_bringup/StallAwareSpin"
+      stall_timeout: 2.0
+      progress_epsilon: 0.02            # 实际累计转动至少 0.02 rad 才刷新进展计时
+    backup: # 倒车行为配置
+      plugin: "me_nav2_bringup/StallAwareBackUp"
+      stall_timeout: 2.0
+      progress_epsilon: 0.01            # 实际累计移动至少 1 cm 才刷新进展计时
+    drive_on_heading: # 沿当前朝向直行行为
+      plugin: "nav2_behaviors/DriveOnHeading"
+    wait: # 原地等待行为
+      plugin: "nav2_behaviors/Wait"
+    smart_recovery: # 直退优先；短缓弯；无平移通路才检查小角度原地旋转
+      plugin: "me_nav2_bringup/SmartRecovery"
+      enabled: true
+      backup_distance: 0.5              # 单次动作总路程上限，含前进/倒车
+      backup_speed: 0.1
+      segment_length: 0.4              # 同时尝试 0.40 / 0.25 / 0.15 / 0.05 m
+      execute_distance: 0.1            # 每走约 10 cm，重新检查并规划
+      max_curvature: 1.5               # 1/m；平移中角速度不超过 0.15 rad/s
+      max_segment_yaw: 0.52            # 单条候选最多约 30 度，不能横移
+      collision_step: 0.005            # 与守卫一样，最远角点每 5 mm 采样
+      # 与 recovery_guard.yaml 使用同一套扫描间隙规则。
+      scan_topic: /scan
+      scan_timeout: 0.5
+      half_length: 0.345
+      half_width: 0.285
+      min_clearance: 0.025
+      min_linear: 0.02
+      min_angular: 0.04
+      lookahead_time: 0.5
+      min_points: 2
+      footprint_radius: 0.46
+      rotate_speed: 0.3
+      max_total_rotation: 0.78          # 原地转向累计不超过约 45 度
+      yaw_gain: 1.5
+      cross_track_gain: 2.0
+      max_cross_track: 0.06
+      max_yaw_error: 0.26
+      min_exit_distance: 0.05          # 已移开 5cm 且代价可通行，就交回导航重新规划
+      exit_cost: 180.0
+      stall_timeout: 2.0               # 无实际进展就停，换候选；不延长总时限
+      max_replans: 4
+      # 自由空间脱困：全局代价图起点 >= trigger 时，搜索最近的正常可通行格
+      # （cost <= target，即 <253），生成路径后仍用局部代价 + /scan 做硬校验。
+      free_space_escape: true
+      free_space_costmap_topic: /global_costmap/costmap_raw
+      free_space_costmap_frame: map
+      free_space_costmap_timeout: 1.0
+      free_space_trigger_cost: 254.0   # 命中 254/255 才启动；253 仍走普通短动作
+      free_space_target_cost: 252.0    # 目标 cost <=252，等价于 <253
+      free_space_search_radius: 5.0
+      free_space_max_distance: 2.5     # 单次动作最多走这么远
+      free_space_lookahead: 0.35
+      free_space_allow_blocked: true   # 允许穿 253/254，Dijkstra 高惩罚
+      free_space_allow_unknown: false  # 255 默认不穿
+      free_space_blocked_penalty: 20.0
+      free_space_max_cells: 50000
+      free_space_max_total_rotation: 3.14
+      max_time_allowance: 40.0         # 覆盖 2.5m 路径 + 掉头
+
+    # 行为的具体参数调整
+    local_frame: odom
+    global_frame: map
+    robot_base_frame: base_footprint
+    transform_tolerance: 0.1
+    # 设为 0：behavior_server 内部的代价地图碰撞预检会按 cycle_count=0 直接
+    # 放行。标准 BackUp/Spin 由 recovery_guard 看实时 /scan 且区分
+    # 运动方向；而这里的预检只看无方向的局部代价地图，车贴墙时会在发布速度
+    # 之前就 "Collision Ahead" 中止，守卫根本没机会接手。
+    # SmartRecovery 另外检查完整候选轨迹和执行中的修正速度，不受此值影响。
+    simulate_ahead_time: 0.0
+    max_rotational_vel: 1.0
+    min_rotational_vel: 0.4
+    rotational_acc_lim: 3.2
+
+# 航点跟随器配置
+waypoint_follower:
+  ros__parameters:
+    loop_rate: 20                     # 检查是否到达航点状态的频率
+    stop_on_failure: false            # 如果前往某个航点失败，是否停止后续所有任务
+    waypoint_task_executor_plugin: "wait_at_waypoint" # 到达航点后执行的任务
+    wait_at_waypoint:
+      plugin: "nav2_waypoint_follower::WaitAtWaypoint"
+      waypoint_pause_duration: 200    # 在每个航点暂停的毫秒数
+
+# 速度平滑器配置
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: False
+    smoothing_frequency: 20.0         # 平滑计算频率
+    scale_velocities: False           # 如果超出物理极限，是否等比例缩小XY速度以保持原本运动轨迹的弧度
+    feedback: "OPEN_LOOP"             # "OPEN_LOOP" (使用最后发出的指令计算) 或 "CLOSED_LOOP" (通过odom话题读取底盘真实速度计算)
+    max_velocity: [0.4, 0.0, 1.0]      # 与 controller_server 的 vx_max/wz_max 保持一致
+    min_velocity: [-0.4, 0.0, -1.0]   # 各维度的最小速度
+    max_accel: [2.5, 0.0, 3.2]        # 各维度的最大加速度
+    max_decel: [-2.5, -0.0, -3.2]      # 各维度的最大减速度（负数）
+    odom_topic: "odom"                # 仅在 CLOSED_LOOP 时使用
+    odom_duration: 0.1                # 用于缓冲里程计数据的时长

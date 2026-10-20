@@ -1,0 +1,2074 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Navigation (ROS2 / Nav2)</title>
+
+    <!-- ROS Libraries：本地优先，CDN 兜底 -->
+    <script src="lib/eventemitter2.min.js"></script>
+    <script>window.EventEmitter2 || document.write('<script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.min.js"><\/script>')</script>
+    <script src="lib/roslib.min.js"></script>
+    <script>window.ROSLIB || document.write('<script src="https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js"><\/script>')</script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1d2e;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: #252837;
+            border-right: 1px solid #3a3d4e;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .sidebar h1 {
+            font-size: 1.5rem;
+            font-weight: 300;
+            margin-bottom: 10px;
+            color: #ffc947;
+        }
+
+        .sidebar h2 {
+            font-size: 1rem;
+            font-weight: 500;
+            margin: 20px 0 10px 0;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #1a1d2e;
+            border-radius: 8px;
+            margin-bottom: 5px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #666;
+            flex-shrink: 0;
+        }
+
+        .status-indicator.connected {
+            background: #4ade80;
+            box-shadow: 0 0 10px #4ade80;
+        }
+
+        .status-indicator.error {
+            background: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+        }
+
+        /* 安全状态面板（nav2_safety） */
+        .safety-panel {
+            padding: 8px 10px;
+            background: #1a1d2e;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 0.85rem;
+            color: #a0a0a0;
+        }
+
+        .safety-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2px 0;
+        }
+
+        .safety-row b.ok { color: #4ade80; }
+        .safety-row b.warn { color: #fbbf24; }
+        .safety-row b.bad { color: #ef4444; }
+        .safety-row b.unknown { color: #6b7280; }
+
+        .safety-detail {
+            margin-top: 6px;
+            font-size: 0.72rem;
+            line-height: 1.35;
+            color: #6b7280;
+            word-break: break-all;
+        }
+
+        /* 机器人实时状态（robot_status_monitor） */
+        .robot-state-card {
+            padding: 12px 14px;
+            background: #151827;
+            border-radius: 10px;
+            border-left: 4px solid #6b7280;
+            margin-bottom: 15px;
+            transition: border-color .2s, opacity .2s;
+        }
+
+        .robot-state-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .robot-state-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #6b7280;
+            flex-shrink: 0;
+        }
+
+        .robot-state-label {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+
+        .robot-state-age {
+            margin-left: auto;
+            font-size: 0.72rem;
+            color: #6b7280;
+        }
+
+        .robot-state-detail {
+            margin-top: 6px;
+            font-size: 0.78rem;
+            line-height: 1.4;
+            color: #a0a0a0;
+            word-break: break-word;
+        }
+
+        .robot-state-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .robot-chip {
+            font-size: 0.7rem;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: #232838;
+            color: #6b7280;
+        }
+
+        .robot-chip.on { background: #1e3a2f; color: #4ade80; }
+        .robot-chip.warn { background: #3a2e1e; color: #fbbf24; }
+        .robot-chip.bad { background: #3a1e1e; color: #ef4444; }
+
+        .robot-state-card.state-idle { border-left-color: #6b7280; }
+        .robot-state-card.state-starting { border-left-color: #9ca3af; }
+        .robot-state-card.state-navigating { border-left-color: #4ade80; }
+        .robot-state-card.state-exploring { border-left-color: #22d3ee; }
+        .robot-state-card.state-recovering { border-left-color: #3b82f6; }
+        .robot-state-card.state-stuck { border-left-color: #f59e0b; }
+        .robot-state-card.state-estop,
+        .robot-state-card.state-safety-lock { border-left-color: #ef4444; }
+        .robot-state-card.state-explore-done { border-left-color: #4ade80; }
+        .robot-state-card.stale { opacity: .55; }
+        .robot-state-card.stale .robot-state-label { color: #6b7280; }
+
+        .nav-status {
+            padding: 8px 10px;
+            background: #1a1d2e;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.85rem;
+            color: #a0a0a0;
+        }
+
+        .nav-status b {
+            color: #e0e0e0;
+            font-weight: 500;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: #a0a0a0;
+            margin-bottom: 5px;
+        }
+
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 10px;
+            background: #1a1d2e;
+            border: 1px solid #3a3d4e;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+        }
+
+        .input-group input:focus,
+        .input-group select:focus {
+            outline: none;
+            border-color: #ffc947;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: #ffc947;
+            color: #1a1d2e;
+        }
+
+        .btn-primary:hover {
+            background: #ffd480;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid #3a3d4e;
+            color: #a0a0a0;
+        }
+
+        .btn-secondary:hover {
+            border-color: #ffc947;
+            color: #ffc947;
+        }
+
+        .btn-secondary.active {
+            background: #ffc947;
+            border-color: #ffc947;
+            color: #1a1d2e;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        /* 点击模式按钮组 */
+        .mode-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .mode-buttons .btn {
+            padding: 9px 4px;
+            font-size: 0.82rem;
+            margin-bottom: 0;
+        }
+
+        /* Layer Controls */
+        .layer-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .layer-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            background: #1a1d2e;
+            border-radius: 6px;
+        }
+
+        .layer-item label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .layer-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .layer-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 1px solid #3a3d4e;
+            flex-shrink: 0;
+        }
+
+        /* Map Container */
+        .map-container {
+            background: #1a1d2e;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .map-header {
+            padding: 20px;
+            background: #252837;
+            border-bottom: 1px solid #3a3d4e;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .map-header h2 {
+            font-size: 1.2rem;
+            font-weight: 400;
+        }
+
+        .map-info {
+            display: flex;
+            gap: 20px;
+            font-size: 0.85rem;
+            color: #a0a0a0;
+            max-width: 60%;
+            flex-wrap: wrap;
+        }
+
+        .map-info span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        #nav-map {
+            flex: 1;
+            position: relative;
+            background: #0a0c14;
+            overflow: hidden;
+        }
+
+        #nav-canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+
+        #nav-canvas.mode-waypoint {
+            cursor: copy;
+        }
+
+        #nav-canvas.mode-pose {
+            cursor: cell;
+        }
+
+        #nav-canvas.panning {
+            cursor: grabbing;
+        }
+
+        .map-controls {
+            position: absolute;
+            top: 100px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 200;
+        }
+
+        .map-controls button {
+            padding: 12px 20px;
+            background: rgba(37, 40, 55, 0.95);
+            border: 1px solid #3a3d4e;
+            border-radius: 8px;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            min-width: 140px;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .map-controls button:hover {
+            background: rgba(255, 201, 71, 0.2);
+            border-color: #ffc947;
+            transform: translateX(-2px);
+        }
+
+        .coordinates {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            padding: 10px 15px;
+            background: rgba(37, 40, 55, 0.9);
+            border: 1px solid #3a3d4e;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            z-index: 200;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #a0a0a0;
+            z-index: 100;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #3a3d4e;
+            border-top-color: #ffc947;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Taste refresh: focused navigation control room */
+        :root {
+            --nav-bg: #081014;
+            --nav-panel: #0d1a1f;
+            --nav-panel-2: #102228;
+            --nav-border: #294950;
+            --nav-accent: #65e6c0;
+            --nav-text: #e8f4f1;
+            --nav-muted: #9db7b1;
+        }
+        body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: var(--nav-bg); color: var(--nav-text); }
+        .container { grid-template-columns: 320px minmax(0, 1fr); min-height: 100dvh; }
+        .sidebar { background: rgba(13,26,31,.98); border-right-color: var(--nav-border); padding: 22px 20px; }
+        .sidebar h1 { color: var(--nav-text); font-weight: 650; letter-spacing: .01em; }
+        .sidebar h1 span { color: var(--nav-accent) !important; }
+        .sidebar h2 { color: var(--nav-accent); font-size: .68rem; letter-spacing: .16em; margin-top: 22px; }
+        .status, .nav-status, .layer-item { background: #0a171b; border: 1px solid rgba(41,73,80,.75); }
+        .status { border-radius: 999px; }
+        .status-indicator.connected { background: var(--nav-accent); box-shadow: 0 0 12px rgba(101,230,192,.7); }
+        .input-group label { color: var(--nav-muted); }
+        .input-group input, .input-group select { background: #0a171b; border-color: var(--nav-border); border-radius: 10px; min-height: 40px; }
+        .input-group input:focus, .input-group select:focus { border-color: var(--nav-accent); box-shadow: 0 0 0 3px rgba(101,230,192,.13); }
+        .btn { border-radius: 10px; min-height: 42px; text-transform: none; letter-spacing: .01em; }
+        .btn-primary { background: var(--nav-accent); color: #06201b; }
+        .btn-primary:hover { background: #8af0d3; box-shadow: 0 8px 20px rgba(101,230,192,.18); }
+        .btn-secondary { border-color: #31555c; color: var(--nav-muted); }
+        .btn-secondary:hover, .btn-secondary.active { border-color: var(--nav-accent); color: #06201b; background: var(--nav-accent); }
+        .btn-danger { background: #d95555; }
+        .map-container { background: var(--nav-bg); }
+        .map-header { padding: 16px 22px; background: var(--nav-panel); border-bottom-color: var(--nav-border); }
+        .map-header h2 { font-weight: 650; }
+        .map-info { color: var(--nav-muted); gap: 16px; font-size: .8rem; }
+        #nav-map { background: #071013; }
+        .map-controls { top: 84px; right: 18px; gap: 8px; }
+        .map-controls button { min-width: 120px; padding: 10px 14px; border-radius: 10px; background: rgba(13,26,31,.94); border-color: var(--nav-border); }
+        .map-controls button:hover { background: rgba(101,230,192,.14); border-color: var(--nav-accent); }
+        .coordinates { bottom: 18px; left: 18px; border-radius: 10px; background: rgba(13,26,31,.92); border-color: var(--nav-border); color: var(--nav-text); }
+        .loading-spinner { border-color: #294950; border-top-color: var(--nav-accent); }
+        .layer-color { border-radius: 999px; }
+        @media (max-width: 900px) {
+            body { overflow: auto; }
+            .container { display: flex; flex-direction: column; min-height: 100dvh; }
+            .sidebar { max-height: none; border-right: 0; border-bottom: 1px solid var(--nav-border); }
+            .map-container { min-height: 72dvh; }
+            .map-header { align-items: flex-start; gap: 10px; flex-direction: column; }
+            .map-info { max-width: 100%; }
+        }
+    </style>
+    <style>
+        /* Final layout pass: map-first navigation workspace */
+        .container { grid-template-columns: 348px minmax(0, 1fr); }
+        .sidebar { padding: 28px 22px 22px; }
+        .sidebar h1 { font-size: 1.42rem; margin-bottom: 18px; }
+        .sidebar h2 { margin-top: 26px; margin-bottom: 12px; }
+        .nav-status { line-height: 1.8; padding: 12px 14px; }
+        .mode-buttons { gap: 6px; }
+        .mode-buttons .btn { min-height: 38px; font-size: .78rem; }
+        .layer-controls { gap: 6px; }
+        .layer-item { padding: 9px 10px; }
+        .map-container { padding: 14px; gap: 12px; }
+        .map-header { border: 1px solid var(--nav-border); border-radius: 14px; padding: 15px 18px; }
+        .map-header h2 { font-size: 1.08rem; }
+        #nav-map { border: 1px solid var(--nav-border); border-radius: 14px; box-shadow: inset 0 0 0 1px rgba(101,230,192,.03), 0 16px 36px rgba(0,0,0,.2); }
+        .map-controls { top: 28px; right: 28px; }
+        .map-controls button { min-width: 108px; font-size: .78rem; }
+        .coordinates { bottom: 28px; left: 28px; font-size: .78rem; }
+        @media (max-width: 900px) {
+            .container { display:flex; }
+            .sidebar { padding: 20px 16px; }
+            .map-container { padding: 10px; }
+            .map-controls { top: 22px; right: 22px; }
+            .coordinates { bottom: 22px; left: 22px; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <h1>Robot Navigation <span style="font-size: 0.8rem; color: #4dabf7;">ROS2</span></h1>
+
+            <!-- Connection Status -->
+            <div class="status">
+                <div class="status-indicator" id="status-indicator"></div>
+                <span id="status-text">未连接</span>
+            </div>
+            <a href="workbench.html" style="display:inline-block; margin:0 0 8px; color:#f97316; font-size:0.82rem; text-decoration:none;">打开新版导航工作台 →</a>
+            <a href="cockpit.html" style="display:inline-block; margin:0 0 8px; color:#4dabf7; font-size:0.82rem; text-decoration:none;">打开座舱中控台 →</a>
+            <div class="nav-status">
+                导航状态：<b id="nav-state">待机</b><br>
+                机器人：<b id="robot-pose">--, --</b> <span id="tf-state"></span>
+            </div>
+
+            <!-- 机器人实时状态（robot_status_monitor） -->
+            <div class="robot-state-card state-idle" id="robot-state-card">
+                <div class="robot-state-head">
+                    <span class="robot-state-dot" id="robot-state-dot"></span>
+                    <span class="robot-state-label" id="robot-state-label">等待状态...</span>
+                    <span class="robot-state-age" id="robot-state-age"></span>
+                </div>
+                <div class="robot-state-detail" id="robot-state-detail">--</div>
+                <div class="robot-state-chips" id="robot-state-chips"></div>
+            </div>
+
+            <!-- Connection Settings -->
+            <h2>连接设置</h2>
+            <div class="input-group">
+                <label>ROSBridge 地址</label>
+                <input type="text" id="rosbridge-url" value="ws://localhost:9090">
+            </div>
+            <button class="btn btn-primary" id="connect-btn">连接</button>
+
+            <!-- Map Configuration -->
+            <h2>地图话题</h2>
+            <div class="input-group">
+                <label>静态地图 (Map)</label>
+                <input type="text" id="map-topic" value="/map">
+            </div>
+            <div class="input-group">
+                <label>全局代价地图 (Global Costmap)</label>
+                <input type="text" id="global-costmap-topic" value="/global_costmap/costmap">
+            </div>
+            <div class="input-group">
+                <label>局部代价地图 (Local Costmap)</label>
+                <input type="text" id="local-costmap-topic" value="/local_costmap/costmap">
+            </div>
+            <div class="input-group">
+                <label>全局路径 (Path)</label>
+                <input type="text" id="path-topic" value="/planner_server/plan">
+            </div>
+
+            <!-- Appearance Controls -->
+            <h2>外观设置</h2>
+            <div class="input-group">
+                <label>背景颜色 (Color)</label>
+                <input type="color" id="bg-color" value="#0a0c14" style="height: 40px; cursor: pointer;">
+            </div>
+            <div class="input-group" style="display: flex; align-items: center; justify-content: space-between;">
+                <label style="margin: 0;">暗色地图 (Dark Map)</label>
+                <input type="checkbox" id="map-theme" style="width: 20px; height: 20px;" checked>
+            </div>
+
+            <!-- Layer Controls -->
+            <h2>图层控制</h2>
+            <div class="layer-controls">
+                <div class="layer-item">
+                    <label>
+                        <input type="checkbox" id="layer-map" checked>
+                        <span class="layer-color" style="background: #808080;"></span>
+                        <span>栅格地图</span>
+                    </label>
+                </div>
+                <div class="layer-item">
+                    <label>
+                        <input type="checkbox" id="layer-global-costmap" checked>
+                        <span class="layer-color" style="background: #ef4444;"></span>
+                        <span>全局代价地图</span>
+                    </label>
+                </div>
+                <div class="layer-item">
+                    <label>
+                        <input type="checkbox" id="layer-local-costmap">
+                        <span class="layer-color" style="background: #f59f00;"></span>
+                        <span>局部代价地图</span>
+                    </label>
+                </div>
+                <div class="layer-item">
+                    <label>
+                        <input type="checkbox" id="layer-robot" checked>
+                        <span class="layer-color" style="background: #4ade80;"></span>
+                        <span>机器人位置</span>
+                    </label>
+                </div>
+                <div class="layer-item">
+                    <label>
+                        <input type="checkbox" id="layer-path" checked>
+                        <span class="layer-color" style="background: #3b82f6;"></span>
+                        <span>规划路径</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Click Mode -->
+            <h2>点击模式</h2>
+            <div class="mode-buttons">
+                <button id="mode-goal" class="btn btn-secondary active">目标点</button>
+                <button id="mode-waypoint" class="btn btn-secondary">航点</button>
+                <button id="mode-pose" class="btn btn-secondary">初始位姿</button>
+            </div>
+
+            <!-- Waypoint Panel -->
+            <div id="waypoint-panel" style="display: none;">
+                <div class="input-group">
+                    <label>航点列表 (<span id="waypoint-count">0</span>)</label>
+                    <div id="waypoint-list"
+                        style="max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 8px; margin-top: 5px;">
+                        <p style="color: #888; font-size: 0.85rem; text-align: center;">点击地图添加航点</p>
+                    </div>
+                </div>
+
+                <div class="input-group" style="display: flex; gap: 10px;">
+                    <button id="start-waypoint-nav-btn" class="btn btn-primary" style="flex: 1;">▶️ 开始导航</button>
+                    <button id="stop-waypoint-nav-btn" class="btn btn-secondary" style="flex: 1;">⏸️ 停止</button>
+                </div>
+
+                <div class="input-group" style="display: flex; align-items: center; justify-content: space-between;">
+                    <label style="margin: 0; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="loop-waypoints-checkbox"
+                            style="width: 18px; height: 18px; cursor: pointer;" checked>
+                        <span>循环导航</span>
+                    </label>
+                </div>
+
+                <div class="input-group">
+                    <button id="clear-waypoints-btn" class="btn btn-secondary">🗑️ 清空航点</button>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <h2>操作</h2>
+            <button class="btn btn-secondary" id="reset-view-btn">重置视角</button>
+            <button class="btn btn-secondary" id="clear-path-btn">清除路径</button>
+            <button class="btn btn-danger" id="cancel-goal-btn">取消目标</button>
+
+            <!-- Safety（对应 nav2_safety 安全层） -->
+            <h2>安全状态</h2>
+            <div class="safety-panel">
+                <div class="safety-row">
+                    <span>自动驾驶</span>
+                    <b id="safety-autonomy">未知</b>
+                </div>
+                <div class="safety-row">
+                    <span>停止指令</span>
+                    <b id="safety-stopping">未知</b>
+                </div>
+                <div class="safety-row">
+                    <span>重定位跟踪</span>
+                    <b id="safety-tracking">未知</b>
+                </div>
+                <div class="safety-row">
+                    <span>急停</span>
+                    <b id="safety-estop">未触发</b>
+                </div>
+                <div id="safety-detail" class="safety-detail"></div>
+            </div>
+            <button class="btn btn-danger" id="estop-btn">🛑 急停</button>
+            <button class="btn btn-secondary" id="estop-clear-btn">解除急停</button>
+        </div>
+
+        <!-- Map Display -->
+        <div class="map-container">
+            <div class="map-header">
+                <h2>2D 导航地图</h2>
+                <div class="map-info">
+                    <span id="mode-hint">点击地图设置导航目标</span>
+                    <span>拖动平移</span>
+                    <span>滚轮缩放</span>
+                </div>
+            </div>
+
+            <div id="nav-map">
+                <canvas id="nav-canvas"></canvas>
+                <div class="loading" id="loading">
+                    <div class="loading-spinner"></div>
+                    <p id="loading-text">等待地图数据...</p>
+                </div>
+            </div>
+
+            <div class="map-controls">
+                <button id="zoom-in-btn">放大</button>
+                <button id="zoom-out-btn">缩小</button>
+                <button id="fit-map-btn">适应窗口</button>
+            </div>
+
+            <div class="coordinates" id="coordinates">
+                X: 0.00 m | Y: 0.00 m | θ: 0.00°
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // 常量配置（与本项目 Nav2/定位栈对应）
+        // TF 链: map --(small_gicp_relocalization)--> odom --(super_lio_bridge / sensor_scan_generation)--> base_footprint
+        // ============================================
+        const FRAME_MAP = 'map';
+        const FRAME_ODOM = 'odom';
+        const FRAME_BASE = 'base_footprint';
+        const GOAL_TOPIC = '/goal_pose';                       // Humble bt_navigator 原生订阅
+        const INITIAL_POSE_TOPIC = '/initialpose';             // small_gicp 重定位初始位姿
+        const CANCEL_SERVICE = '/navigate_to_pose/_action/cancel_goal'; // 空.uuid = 取消全部目标
+        const STATUS_TOPIC = '/navigate_to_pose/_action/status';
+        const ROBOT_STATUS_TOPIC = '/robot/status';            // robot_status_monitor 的 JSON
+        const WAYPOINT_TIMEOUT_S = 120;                        // 单航点超时（秒）
+
+        // 安全层（nav2_safety）话题
+        const SAFETY_AUTONOMY_TOPIC = '/safety/autonomy_blocked';  // true = 自动驾驶被锁住
+        const SAFETY_STOPPING_TOPIC = '/safety/deadman_stopping';  // true = 兜底级正在下发零速
+        const SAFETY_TRACKING_TOPIC = '/localization/tracking_ok'; // 重定位跟踪健康度
+        const SAFETY_ESTOP_TOPIC = '/safety/estop';                // 软件急停（写入一次即可）
+        const SAFETY_ESTOP_ACTIVE_TOPIC = '/safety/estop_active';  // 锁存后的状态（读这个）
+        const SAFETY_STATUS_TOPIC = '/safety/watchdog_status';     // 看门狗判定详情
+
+        // ROS2 action_msgs/msg/GoalStatus
+        // ROS2 action_msgs/GoalStatus: 4 SUCCEEDED, 5 CANCELED, 6 ABORTED
+        const STATUS_SUCCEEDED = 4, STATUS_CANCELED = 5, STATUS_ABORTED = 6;
+
+        // ============================================
+        // State Management
+        // ============================================
+        const state = {
+            ros: null,
+            connected: false,
+            mode: 'goal',          // goal | waypoint | pose
+            // 订阅
+            subs: {},              // { map, gcost, lcost, path, tf, tfStatic, status }
+            safetySubs: {},        // 安全层订阅（单独一份，便于统一清理）
+            robotSub: null,       // /robot/status
+            robot: { msg: null, at: 0 }, // 最近一帧状态与接收时间
+            qosRegistry: {},       // 话题名 -> QoS 覆盖（锁存类话题）
+            // 发布 / 服务
+            goalPublisher: null,
+            initialPosePublisher: null,
+            cancelClient: null,
+            // 地图数据
+            grids: { map: null, gcost: null, lcost: null },  // OccupancyGrid 消息
+            gridImages: {},        // 离屏 canvas（按消息+主题缓存）
+            pathPoses: [],         // [{x, y}]
+            // TF 缓冲
+            tf: { dynamic: new Map(), static: new Map() },   // "parent|child" -> TransformStamped
+            robotPose: null,       // { x, y, yaw, t }
+            // 视图
+            view: { scale: 20, offsetX: 0, offsetY: 0 },     // px/m，屏幕平移
+            dirty: true,
+            // 目标
+            goalMarker: null,      // { x, y, yaw }
+            goalTrack: { snapshot: null, currentId: null, state: 'idle' }, // 单点目标状态
+            // 航点
+            waypoints: [],
+            // doneIds: 已处理过终态的 goal uuid。rclcpp_action 的 status 话题会周期性
+            // 重发整个状态数组（约 1Hz），不记录的话「到达→发下一点」间隙内的重复
+            // SUCCEEDED 会把 onWaypointReached 再触发一次，导致跳点。
+            wn: { running: false, idx: 0, snapshot: null, currentId: null, timer: null, doneIds: new Set() },
+            // 统计
+            msgCount: 0, fpsCount: 0, lastFps: Date.now(),
+            // 安全层（nav2_safety）
+            safety: {
+                autonomy: null,      // /safety/autonomy_blocked：true = 自动驾驶被锁住
+                stopping: null,      // /safety/deadman_stopping：true = 正在下发零速
+                tracking: null,      // /localization/tracking_ok
+                estop: false,        // /safety/estop 当前值
+                detail: ''           // /safety/watchdog_status 的详细文本
+            }
+        };
+
+        // ============================================
+        // DOM Elements
+        // ============================================
+        const elements = {
+            statusIndicator: document.getElementById('status-indicator'),
+            statusText: document.getElementById('status-text'),
+            navState: document.getElementById('nav-state'),
+            robotPose: document.getElementById('robot-pose'),
+            tfState: document.getElementById('tf-state'),
+            safetyAutonomy: document.getElementById('safety-autonomy'),
+            safetyStopping: document.getElementById('safety-stopping'),
+            safetyTracking: document.getElementById('safety-tracking'),
+            safetyEstop: document.getElementById('safety-estop'),
+            safetyDetail: document.getElementById('safety-detail'),
+            robotStateCard: document.getElementById('robot-state-card'),
+            robotStateDot: document.getElementById('robot-state-dot'),
+            robotStateLabel: document.getElementById('robot-state-label'),
+            robotStateAge: document.getElementById('robot-state-age'),
+            robotStateDetail: document.getElementById('robot-state-detail'),
+            robotStateChips: document.getElementById('robot-state-chips'),
+            estopBtn: document.getElementById('estop-btn'),
+            estopClearBtn: document.getElementById('estop-clear-btn'),
+            rosbridgeInput: document.getElementById('rosbridge-url'),
+            connectBtn: document.getElementById('connect-btn'),
+            mapTopicInput: document.getElementById('map-topic'),
+            globalCostmapTopicInput: document.getElementById('global-costmap-topic'),
+            localCostmapTopicInput: document.getElementById('local-costmap-topic'),
+            pathTopicInput: document.getElementById('path-topic'),
+            layerMap: document.getElementById('layer-map'),
+            layerGlobalCostmap: document.getElementById('layer-global-costmap'),
+            layerLocalCostmap: document.getElementById('layer-local-costmap'),
+            layerRobot: document.getElementById('layer-robot'),
+            layerPath: document.getElementById('layer-path'),
+            waypointPanel: document.getElementById('waypoint-panel'),
+            waypointList: document.getElementById('waypoint-list'),
+            waypointCount: document.getElementById('waypoint-count'),
+            loopWaypointsCheckbox: document.getElementById('loop-waypoints-checkbox'),
+            modeHint: document.getElementById('mode-hint'),
+            loading: document.getElementById('loading'),
+            loadingText: document.getElementById('loading-text'),
+            coordinates: document.getElementById('coordinates'),
+            canvas: document.getElementById('nav-canvas')
+        };
+
+        // ============================================
+        // Initialization
+        // ============================================
+        function init() {
+            console.log('正在初始化导航页面 (ROS2 / Nav2)...');
+
+            if (typeof ROSLIB === 'undefined') {
+                console.error('ROSLIB 未加载');
+                setConnectionUI(false, '库加载失败');
+                return;
+            }
+
+            // 自动替换 hostname（通过 http 访问机器人时无需手改 IP）
+            if (elements.rosbridgeInput.value.includes('localhost')) {
+                elements.rosbridgeInput.value = `ws://${window.location.hostname}:9090`;
+            }
+
+            elements.connectBtn.addEventListener('click', toggleConnection);
+            elements.mapTopicInput.addEventListener('change', () => resubscribeGrid('map', elements.mapTopicInput.value, 'map'));
+            elements.globalCostmapTopicInput.addEventListener('change', () => resubscribeGrid('gcost', elements.globalCostmapTopicInput.value, 'gcost'));
+            elements.localCostmapTopicInput.addEventListener('change', () => resubscribeGrid('lcost', elements.localCostmapTopicInput.value, 'lcost'));
+            elements.pathTopicInput.addEventListener('change', () => resubscribePath());
+
+            elements.layerMap.addEventListener('change', () => requestDraw());
+            elements.layerGlobalCostmap.addEventListener('change', () => requestDraw());
+            elements.layerLocalCostmap.addEventListener('change', () => requestDraw());
+            elements.layerRobot.addEventListener('change', () => requestDraw());
+            elements.layerPath.addEventListener('change', () => requestDraw());
+            document.getElementById('map-theme').addEventListener('change', () => { rebuildGridImages(); requestDraw(); });
+            document.getElementById('bg-color').addEventListener('input', (e) => {
+                document.getElementById('nav-map').style.background = e.target.value;
+                requestDraw();
+            });
+
+            document.getElementById('mode-goal').addEventListener('click', () => setMode('goal'));
+            document.getElementById('mode-waypoint').addEventListener('click', () => setMode('waypoint'));
+            document.getElementById('mode-pose').addEventListener('click', () => setMode('pose'));
+
+            document.getElementById('start-waypoint-nav-btn').addEventListener('click', startWaypointNavigation);
+            document.getElementById('stop-waypoint-nav-btn').addEventListener('click', () => stopWaypointNavigation(false));
+            document.getElementById('clear-waypoints-btn').addEventListener('click', clearAllWaypoints);
+
+            document.getElementById('reset-view-btn').addEventListener('click', fitMap);
+            document.getElementById('clear-path-btn').addEventListener('click', () => { state.pathPoses = []; requestDraw(); });
+            document.getElementById('cancel-goal-btn').addEventListener('click', cancelGoal);
+
+            // 安全层：急停 / 解除
+            elements.estopBtn.addEventListener('click', () => {
+                if (!confirm('确认执行软件急停？\n\n会锁存锁，压制自动驾驶和遥控，直到手动解除。')) return;
+                publishEstop(true);
+            });
+            elements.estopClearBtn.addEventListener('click', () => publishEstop(false));
+
+            document.getElementById('zoom-in-btn').addEventListener('click', () => zoom(1.25));
+            document.getElementById('zoom-out-btn').addEventListener('click', () => zoom(0.8));
+            document.getElementById('fit-map-btn').addEventListener('click', fitMap);
+
+            initCanvas();
+            setInterval(updateFps, 1000);
+            setInterval(renderRobotStatus, 500);
+            requestDraw();
+            console.log('初始化完成');
+        }
+
+        // ============================================
+        // Connection Management
+        // ============================================
+        function toggleConnection() {
+            if (state.connected) disconnect();
+            else connect();
+        }
+
+        function connect() {
+            const url = elements.rosbridgeInput.value;
+            console.log('连接 rosbridge:', url);
+            setConnectionUI(false, '连接中...');
+
+            state.ros = new ROSLIB.Ros({ url });
+
+            state.ros.on('connection', () => {
+                console.log('已连接 rosbridge');
+                state.connected = true;
+                setConnectionUI(true, '已连接');
+                installQosWrapper();
+                initTopics();
+            });
+            state.ros.on('error', (err) => {
+                console.error('连接错误:', err);
+                setConnectionUI(false, '连接失败');
+            });
+            state.ros.on('close', () => {
+                console.log('连接已关闭');
+                state.connected = false;
+                setConnectionUI(false, '未连接');
+                cleanupSubscriptions();
+            });
+        }
+
+        function disconnect() {
+            stopWaypointNavigation(true);
+            if (state.ros) state.ros.close();
+        }
+
+        function setConnectionUI(connected, text) {
+            elements.statusText.textContent = text;
+            elements.statusIndicator.classList.toggle('connected', connected);
+            elements.statusIndicator.classList.remove('error');
+            elements.connectBtn.textContent = connected ? '断开' : '连接';
+        }
+
+        function cleanupSubscriptions() {
+            Object.values(state.subs).forEach((sub) => { try { sub.unsubscribe(); } catch (e) { } });
+            state.subs = {};
+            Object.values(state.safetySubs).forEach((sub) => { try { sub.unsubscribe(); } catch (e) { } });
+            state.safetySubs = {};
+            if (state.robotSub) { try { state.robotSub.unsubscribe(); } catch (e) { } }
+            state.robotSub = null;
+            state.robot.msg = null;
+            state.robot.at = 0;
+            renderRobotStatus();
+            state.safety.autonomy = null;
+            state.safety.stopping = null;
+            state.safety.tracking = null;
+            state.safety.detail = '';
+            renderSafety();
+            state.grids = { map: null, gcost: null, lcost: null };
+            state.gridImages = {};
+            state.pathPoses = [];
+            state.robotPose = null;
+            state.goalMarker = null;
+            state.tf.dynamic.clear();
+            state.tf.static.clear();
+            stopWaypointNavigation(true);
+            elements.loading.style.display = 'block';
+            requestDraw();
+        }
+
+        // ============================================
+        // Topics（ROS2 / Nav2）
+        // ============================================
+        // QoS 注入：roslib 1.3 的 subscribe 不支持 QoS 字段，这里在连接层统一
+        // 给注册过的主题（/map、代价地图、/tf_static 等锁存话题）补 qos 字段，
+        // rosbridge Humble 版支持该覆盖；重连后重新订阅时同样生效。
+        function installQosWrapper() {
+            const ros = state.ros;
+            const origCall = ros.callOnConnection.bind(ros);
+            ros.callOnConnection = (msg) => {
+                if (msg && msg.op === 'subscribe' && state.qosRegistry[msg.topic]) {
+                    msg.qos = state.qosRegistry[msg.topic];
+                }
+                origCall(msg);
+            };
+        }
+
+        // ============================================
+        // 安全层（nav2_safety）
+        // ============================================
+        // 安全层会主动让车停下：看门狗判定定位不可信、兜底级进入停车、急停锁存。
+        // 没有这块显示的话，现场只能看到"车突然不动了"，第一反应会以为是设备坏了，
+        // 真正的原因（定位跟丢 / 锁还锁着）反而被漏掉。
+        function setupSafetySubscriptions() {
+            const makeTopic = (topicName, messageType, latched) => {
+                if (latched) {
+                    state.qosRegistry[topicName] = {
+                        durability: 'transient_local', reliability: 'reliable',
+                        depth: 1, history: 'keep_last'
+                    };
+                }
+                return new ROSLIB.Topic({
+                    ros: state.ros, name: topicName,
+                    messageType: messageType, queue_length: 1
+                });
+            };
+
+            const bind = (key, topicName, messageType, latched, cast) => {
+                if (state.safetySubs[key]) { try { state.safetySubs[key].unsubscribe(); } catch (e) { } }
+                const topic = makeTopic(topicName, messageType, latched);
+                state.safetySubs[key] = topic;
+                topic.subscribe((msg) => {
+                    countMsg();
+                    state.safety[key] = cast(msg.data);
+                    renderSafety();
+                });
+            };
+
+            bind('autonomy', SAFETY_AUTONOMY_TOPIC, 'std_msgs/Bool', true, (v) => !!v);
+            bind('tracking', SAFETY_TRACKING_TOPIC, 'std_msgs/Bool', true, (v) => !!v);
+            // 读锁存状态而不是那条一次性指令：否则重连后显示"未触发"，
+            // 而急停其实还锁着
+            bind('estop', SAFETY_ESTOP_ACTIVE_TOPIC, 'std_msgs/Bool', true, (v) => !!v);
+            bind('stopping', SAFETY_STOPPING_TOPIC, 'std_msgs/Bool', false, (v) => !!v);
+            bind('detail', SAFETY_STATUS_TOPIC, 'std_msgs/String', false, (v) => String(v));
+
+            renderSafety();
+        }
+
+        function setSafetyField(el, text, cls) {
+            if (!el) return;
+            el.textContent = text;
+            el.className = cls;
+        }
+
+        function renderSafety() {
+            const s = state.safety;
+
+            if (s.autonomy === null) setSafetyField(elements.safetyAutonomy, '未知', 'unknown');
+            else setSafetyField(elements.safetyAutonomy, s.autonomy ? '已锁住' : '放行',
+                s.autonomy ? 'bad' : 'ok');
+
+            if (s.stopping === null) setSafetyField(elements.safetyStopping, '未知', 'unknown');
+            else setSafetyField(elements.safetyStopping, s.stopping ? '正在停车' : '正常',
+                s.stopping ? 'warn' : 'ok');
+
+            if (s.tracking === null) setSafetyField(elements.safetyTracking, '未知', 'unknown');
+            else setSafetyField(elements.safetyTracking, s.tracking ? '正常' : '已跟丢',
+                s.tracking ? 'ok' : 'bad');
+
+            setSafetyField(elements.safetyEstop, s.estop ? '已锁存' : '未触发',
+                s.estop ? 'bad' : 'ok');
+
+            if (elements.safetyDetail) {
+                // 截断显示，完整内容见 /safety/watchdog_status
+                elements.safetyDetail.textContent = s.detail ? s.detail.slice(0, 160) : '';
+            }
+        }
+
+        // ============================================
+        // 机器人实时状态（robot_status_monitor）
+        // ============================================
+        const ROBOT_STATE_CLASS = {
+            IDLE: 'state-idle', STARTING: 'state-starting',
+            NAVIGATING: 'state-navigating', EXPLORING: 'state-exploring',
+            RECOVERING: 'state-recovering', STUCK: 'state-stuck',
+            ESTOP: 'state-estop', SAFETY_LOCK: 'state-safety-lock',
+            EXPLORE_DONE: 'state-explore-done'
+        };
+        const ROBOT_STATE_COLOR = {
+            IDLE: '#6b7280', STARTING: '#9ca3af', NAVIGATING: '#4ade80',
+            EXPLORING: '#22d3ee', RECOVERING: '#3b82f6', STUCK: '#f59e0b',
+            ESTOP: '#ef4444', SAFETY_LOCK: '#ef4444', EXPLORE_DONE: '#4ade80'
+        };
+
+        function setupRobotStatusSubscription() {
+            if (state.robotSub) { try { state.robotSub.unsubscribe(); } catch (e) { } }
+            // 发布端是 transient_local，晚加入的页面也能立刻拿到最后一帧。
+            state.qosRegistry[ROBOT_STATUS_TOPIC] = {
+                durability: 'transient_local', reliability: 'reliable',
+                depth: 1, history: 'keep_last'
+            };
+            const topic = new ROSLIB.Topic({
+                ros: state.ros, name: ROBOT_STATUS_TOPIC,
+                messageType: 'std_msgs/String', queue_length: 1
+            });
+            state.robotSub = topic;
+            topic.subscribe((msg) => {
+                countMsg();
+                try {
+                    state.robot.msg = JSON.parse(msg.data);
+                    state.robot.at = Date.now();
+                } catch (e) {
+                    console.warn('无法解析 /robot/status:', e);
+                }
+                renderRobotStatus();
+            });
+            renderRobotStatus();
+        }
+
+        function renderRobotStatus() {
+            const card = elements.robotStateCard;
+            if (!card) return;
+            const r = state.robot;
+            const age = r.at ? (Date.now() - r.at) / 1000 : null;
+            const stale = !r.msg || age > 3.0;
+            const st = (r.msg && r.msg.state) ? r.msg.state : 'IDLE';
+            card.className = 'robot-state-card ' +
+                (ROBOT_STATE_CLASS[st] || 'state-idle') + (stale ? ' stale' : '');
+
+            if (elements.robotStateDot) {
+                elements.robotStateDot.style.background =
+                    stale ? '#6b7280' : (ROBOT_STATE_COLOR[st] || '#6b7280');
+            }
+            elements.robotStateLabel.textContent = stale
+                ? (r.msg ? '状态过期' : '等待状态...')
+                : (r.msg.label || st);
+            elements.robotStateAge.textContent = age === null ? ''
+                : (stale ? `${Math.round(age)}s 前` : '实时');
+            elements.robotStateDetail.textContent = stale
+                ? (r.msg ? '超过 3 秒没有收到 /robot/status' : '等待 robot_status_monitor 发布 /robot/status')
+                : (r.msg.detail || '--');
+
+            if (!r.msg || stale) {
+                elements.robotStateChips.innerHTML = '';
+                return;
+            }
+
+            const chips = [];
+            chips.push(['导航', r.msg.nav_active ? '是' : '否',
+                r.msg.nav_active ? 'on' : '']);
+            if (r.msg.explore_status) {
+                const exploring =
+                    r.msg.explore_status.indexOf('in_progress') >= 0 ||
+                    r.msg.explore_status.indexOf('started') >= 0;
+                chips.push(['探索', exploring ? '进行中' : r.msg.explore_status,
+                    exploring ? 'on' : '']);
+            }
+            chips.push(['脱困', r.msg.recovery_active ? '进行中' : '否',
+                r.msg.recovery_active ? 'warn' : '']);
+            if (r.msg.recovery_blocked) chips.push(['脱困受阻', '是', 'bad']);
+            chips.push(['定位',
+                r.msg.tracking_ok === false ? '丢失' :
+                    (r.msg.tracking_ok === true ? '正常' : '未知'),
+                r.msg.tracking_ok === false ? 'bad' :
+                    (r.msg.tracking_ok === true ? 'on' : '')]);
+            if (r.msg.estop) chips.push(['急停', '已锁', 'bad']);
+            if (r.msg.collision_stop) chips.push(['碰撞停车', '是', 'bad']);
+            if (r.msg.odom_ok === false) chips.push(['里程计', '过期', 'bad']);
+            if (r.msg.scan_ok === false) chips.push(['雷达', '过期', 'bad']);
+
+            elements.robotStateChips.innerHTML = chips.map(([name, value, cls]) =>
+                `<span class="robot-chip ${cls}">${name}：${value}</span>`
+            ).join('');
+        }
+
+        function publishEstop(active) {
+            if (!state.connected || !state.estopPublisher) {
+                alert('未连接 ROS，无法操作急停');
+                return;
+            }
+            state.estopPublisher.publish(new ROSLIB.Message({ data: !!active }));
+            // 乐观更新，真实状态以 /safety/estop 回读为准
+            state.safety.estop = !!active;
+            renderSafety();
+        }
+
+        function initTopics() {
+            // --- 发布器：单点目标 / 初始位姿 ---
+            state.goalPublisher = new ROSLIB.Topic({
+                ros: state.ros,
+                name: GOAL_TOPIC,
+                messageType: 'geometry_msgs/PoseStamped'
+            });
+            state.initialPosePublisher = new ROSLIB.Topic({
+                ros: state.ros,
+                name: INITIAL_POSE_TOPIC,
+                messageType: 'geometry_msgs/PoseWithCovarianceStamped'
+            });
+
+            // --- 发布器：软件急停（锁存语义，由安全层 twist_mux 的锁实现）---
+            state.estopPublisher = new ROSLIB.Topic({
+                ros: state.ros,
+                name: SAFETY_ESTOP_TOPIC,
+                messageType: 'std_msgs/Bool'
+            });
+
+            setupSafetySubscriptions();
+            setupRobotStatusSubscription();
+
+            // --- 服务：取消目标（rosbridge 可直接调用 action 的 cancel 服务）---
+            state.cancelClient = new ROSLIB.Service({
+                ros: state.ros,
+                name: CANCEL_SERVICE,
+                serviceType: 'action_msgs/srv/CancelGoal'
+            });
+
+            // --- 订阅 ---
+            subscribeGrid('map', elements.mapTopicInput.value, 'map');
+            subscribeGrid('gcost', elements.globalCostmapTopicInput.value, 'gcost');
+            subscribeGrid('lcost', elements.localCostmapTopicInput.value, 'lcost');
+            subscribePath();
+            subscribeTf();
+            subscribeStatus();
+        }
+
+        // 栅格类话题（/map、代价地图）在 Nav2 中均为 transient_local 锁存发布，
+        // 订阅时通过 QoS 注册表附带 transient_local（见 installQosWrapper）。
+        function subscribeGrid(key, topicName, kind) {
+            if (!state.connected || !topicName) return;
+            if (state.subs[key]) { try { state.subs[key].unsubscribe(); } catch (e) { } }
+            state.grids[key] = null;
+            delete state.gridImages[key];
+
+            state.qosRegistry[topicName] = {
+                durability: 'transient_local', reliability: 'reliable', depth: 1, history: 'keep_last'
+            };
+            const topic = new ROSLIB.Topic({
+                ros: state.ros,
+                name: topicName,
+                messageType: 'nav_msgs/OccupancyGrid',
+                throttle_rate: kind === 'map' ? 0 : 200,   // 代价地图限 5Hz，降低带宽
+                queue_length: 1
+            });
+            topic.subscribe((message) => {
+                countMsg();
+                state.grids[key] = message;
+                rebuildGridImage(key);
+                if (key === 'map') {
+                    elements.loading.style.display = 'none';
+                    if (!state.view.fitted) fitMap();
+                }
+                requestDraw();
+            });
+            state.subs[key] = topic;
+
+            // 兜底：若 rosbridge 版本过旧不支持 QoS 覆盖，锁存的 /map 收不到，
+            // 3 秒后尝试通过 /map_server/load_map 服务主动拉取一次地图。
+            if (kind === 'map') {
+                clearTimeout(state.mapFallbackTimer);
+                state.mapFallbackTimer = setTimeout(() => {
+                    if (state.connected && !state.grids.map) {
+                        console.warn('未收到锁存 /map，尝试 load_map 服务拉取...');
+                        setLoadingText('正在拉取地图...');
+                        const svc = new ROSLIB.Service({
+                            ros: state.ros, name: '/map_server/load_map', serviceType: 'nav2_msgs/srv/LoadMap'
+                        });
+                        svc.callService(
+                            new ROSLIB.ServiceRequest({ url: '' }),
+                            (resp) => {
+                                if (resp && resp.map && resp.map.info && resp.map.info.width > 0) {
+                                    console.log('load_map 拉取成功');
+                                    state.grids.map = resp.map;
+                                    rebuildGridImage('map');
+                                    elements.loading.style.display = 'none';
+                                    if (!state.view.fitted) fitMap();
+                                    requestDraw();
+                                } else {
+                                    setLoadingText('等待地图数据...');
+                                }
+                            },
+                            () => setLoadingText('等待地图数据...')
+                        );
+                    }
+                }, 3000);
+            }
+        }
+
+        function resubscribeGrid(key, topicName, kind) {
+            if (state.connected) subscribeGrid(key, topicName, kind);
+        }
+
+        function subscribePath() {
+            if (!state.connected) return;
+            if (state.subs.path) { try { state.subs.path.unsubscribe(); } catch (e) { } }
+            state.pathPoses = [];
+            const topic = new ROSLIB.Topic({
+                ros: state.ros,
+                name: elements.pathTopicInput.value,
+                messageType: 'nav_msgs/Path',
+                throttle_rate: 200,
+                queue_length: 1
+            });
+            topic.subscribe((message) => {
+                countMsg();
+                state.pathPoses = (message.poses || []).map((p) => ({
+                    x: p.pose.position.x, y: p.pose.position.y
+                }));
+                requestDraw();
+            });
+            state.subs.path = topic;
+        }
+
+        function resubscribePath() {
+            if (state.connected) subscribePath();
+        }
+
+        // TF 自解析：直接订阅 /tf 与 /tf_static，无需 tf2_web_republisher
+        function subscribeTf() {
+            const onTf = (store) => (message) => {
+                countMsg();
+                for (const tr of message.transforms) {
+                    store.set(tr.header.frame_id + '|' + tr.child_frame_id, tr);
+                }
+                updateRobotPose();
+            };
+            const tfTopic = new ROSLIB.Topic({
+                ros: state.ros, name: '/tf', messageType: 'tf2_msgs/TFMessage', throttle_rate: 0
+            });
+            tfTopic.subscribe(onTf(state.tf.dynamic));
+            const tfStaticTopic = new ROSLIB.Topic({
+                ros: state.ros, name: '/tf_static', messageType: 'tf2_msgs/TFMessage',
+                throttle_rate: 0, queue_length: 1
+            });
+            state.qosRegistry['/tf_static'] = { durability: 'transient_local', depth: 1 };
+            tfStaticTopic.subscribe(onTf(state.tf.static));
+            state.subs.tf = tfTopic;
+            state.subs.tfStatic = tfStaticTopic;
+        }
+
+        // 航点/目标完成检测：订阅 navigate_to_pose action 的状态话题
+        function subscribeStatus() {
+            const topic = new ROSLIB.Topic({
+                ros: state.ros, name: STATUS_TOPIC, messageType: 'action_msgs/GoalStatusArray'
+            });
+            topic.subscribe(handleGoalStatus);
+            state.subs.status = topic;
+        }
+
+        // ============================================
+        // TF 处理（四元数 / 位姿组合）
+        // ============================================
+        function lookupTf(parent, child) {
+            if (parent === child) return { x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 };
+            const direct = state.tf.dynamic.get(parent + '|' + child) || state.tf.static.get(parent + '|' + child);
+            if (direct) return trToPose(direct.transform);
+            const inverse = state.tf.dynamic.get(child + '|' + parent) || state.tf.static.get(child + '|' + parent);
+            if (inverse) return invertPose(trToPose(inverse.transform));
+            return null;
+        }
+
+        function trToPose(t) {
+            return { x: t.translation.x, y: t.translation.y, z: t.translation.z,
+                     qx: t.rotation.x, qy: t.rotation.y, qz: t.rotation.z, qw: t.rotation.w };
+        }
+
+        function invertPose(p) {
+            const q = { x: -p.qx, y: -p.qy, z: -p.qz, w: p.qw };
+            const inv = qConjRotate(p.x, p.y, p.z, q);
+            return { x: inv[0], y: inv[1], z: inv[2], qx: q.x, qy: q.y, qz: q.z, qw: q.w };
+        }
+
+        function composePose(a, b) {
+            const r = qRotate(b.x, b.y, b.z, a);
+            return {
+                x: a.x + r[0], y: a.y + r[1], z: a.z + r[2],
+                qx: a.qx * b.qw + a.qw * b.qx + a.qy * b.qz - a.qz * b.qy,
+                qy: a.qy * b.qw + a.qw * b.qy + a.qz * b.qx - a.qx * b.qz,
+                qz: a.qz * b.qw + a.qw * b.qz + a.qx * b.qy - a.qy * b.qx,
+                qw: a.qw * b.qw - a.qx * b.qx - a.qy * b.qy - a.qz * b.qz
+            };
+        }
+
+        function qRotate(x, y, z, q) {
+            // v' = q * v * q^-1
+            const ix = q.qw * x + q.qy * z - q.qz * y;
+            const iy = q.qw * y + q.qz * x - q.qx * z;
+            const iz = q.qw * z + q.qx * y - q.qy * x;
+            const iw = -q.qx * x - q.qy * y - q.qz * z;
+            return [
+                ix * q.qw + iw * -q.qx + iy * -q.qz - iz * -q.qy,
+                iy * q.qw + iw * -q.qy + iz * -q.qx - ix * -q.qz,
+                iz * q.qw + iw * -q.qz + ix * -q.qy - iy * -q.qx
+            ];
+        }
+
+        function qConjRotate(x, y, z, q) {
+            return qRotate(x, y, z, { x: -q.x, y: -q.y, z: -q.z, w: q.w });
+        }
+
+        function yawFromQuaternion(q) {
+            // q: {x, y, z, w}
+            return Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+        }
+
+        function updateRobotPose() {
+            const mapToOdom = lookupTf(FRAME_MAP, FRAME_ODOM);
+            const odomToBase = lookupTf(FRAME_ODOM, FRAME_BASE);
+            if (!mapToOdom || !odomToBase) { state.robotPose = null; return; }
+            const p = composePose(mapToOdom, odomToBase);
+            state.robotPose = {
+                x: p.x, y: p.y,
+                yaw: yawFromQuaternion({ x: p.qx, y: p.qy, z: p.qz, w: p.qw }),
+                t: Date.now()
+            };
+            updateSidebarPose();
+            requestDraw();
+        }
+
+        function updateSidebarPose() {
+            if (!state.robotPose) { elements.robotPose.textContent = '--, --'; elements.tfState.textContent = ''; return; }
+            const age = (Date.now() - state.robotPose.t) / 1000;
+            elements.robotPose.textContent =
+                `${state.robotPose.x.toFixed(2)}, ${state.robotPose.y.toFixed(2)} (θ ${(state.robotPose.yaw * 180 / Math.PI).toFixed(0)}°)`;
+            elements.tfState.textContent = age > 2 ? '⚠ TF 过期' : '';
+        }
+
+        // ============================================
+        // 目标发送 / 取消
+        // ============================================
+        function currentStatusUuids() {
+            return new Set(lastStatusUuidSet);
+        }
+
+        function nowMsg() {
+            const t = Date.now() / 1000;
+            return { sec: Math.floor(t), nanosec: Math.round((t % 1) * 1e9) };
+        }
+
+        function yawToQuaternion(yaw) {
+            return { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) };
+        }
+
+        function sendGoal(x, y, yaw) {
+            if (!state.connected) { console.warn('未连接 rosbridge'); return; }
+            const pose = {
+                header: { frame_id: FRAME_MAP, stamp: nowMsg() },
+                pose: {
+                    position: { x, y, z: 0 },
+                    orientation: yawToQuaternion(yaw)
+                }
+            };
+            state.goalPublisher.publish(new ROSLIB.Message(pose));
+            state.goalMarker = { x, y, yaw };
+            // 单目标状态跟踪（航点导航由 wn 状态机管理，不混用，避免跑完后被
+            // 周期重发的 SUCCEEDED 覆盖"全部航点完成"提示）
+            if (!state.wn.running) {
+                state.goalTrack.snapshot = currentStatusUuids();
+                state.goalTrack.currentId = null;
+                state.goalTrack.state = 'sent';
+            }
+            requestDraw();
+            console.log(`发送目标 (${x.toFixed(2)}, ${y.toFixed(2)}, θ ${(yaw * 180 / Math.PI).toFixed(0)}°)`);
+        }
+
+        function cancelGoal(silentMsg) {
+            if (!state.connected) return;
+            stopWaypointNavigation(true);
+            const req = new ROSLIB.ServiceRequest({
+                goal_info: {
+                    stamp: { sec: 0, nanosec: 0 },
+                    goal_id: { uuid: new Array(16).fill(0) }   // 空 uuid = 取消全部目标
+                }
+            });
+            state.cancelClient.callService(req, (resp) => {
+                console.log('取消目标返回码:', resp.return_code);
+                if (!silentMsg) setNavState('已取消');
+                state.goalTrack.state = 'idle';
+                requestDraw();
+            }, (err) => console.error('取消目标失败:', err));
+        }
+
+        // ============================================
+        // 初始位姿（等效 RViz 2D Pose Estimate -> /initialpose）
+        // ============================================
+        function sendInitialPose(x, y, yaw) {
+            if (!state.connected) { console.warn('未连接 rosbridge'); return; }
+            const cov = new Array(36).fill(0);
+            cov[0] = 0.25; cov[7] = 0.25; cov[35] = 0.0685388;  // x / y / yaw
+            state.initialPosePublisher.publish(new ROSLIB.Message({
+                header: { frame_id: FRAME_MAP, stamp: nowMsg() },
+                pose: {
+                    position: { x, y, z: 0 },
+                    orientation: yawToQuaternion(yaw),
+                    covariance: cov
+                }
+            }));
+            console.log(`发送初始位姿 (${x.toFixed(2)}, ${y.toFixed(2)}, θ ${(yaw * 180 / Math.PI).toFixed(0)}°)`);
+            setNavState('初始位姿已发送');
+        }
+
+        // ============================================
+        // 目标状态监测（航点推进）
+        // ============================================
+        function uuidToString(arr) {
+            return (arr || []).map((v) => v.toString(16).padStart(2, '0')).join('');
+        }
+
+        let lastStatusUuidSet = new Set();
+
+        function handleGoalStatus(message) {
+            countMsg();
+            const entries = message.status_list || [];
+            lastStatusUuidSet = new Set(entries.map((e) => uuidToString(e.goal_info.goal_id.uuid)));
+
+            // --- 单点目标状态显示 ---
+            trackSingleGoal(entries);
+
+            // --- 航点推进 ---
+            if (!state.wn.running) return;
+            for (const entry of entries) {
+                const id = uuidToString(entry.goal_info.goal_id.uuid);
+                if (state.wn.snapshot && state.wn.snapshot.has(id)) continue;  // 发送前的旧目标
+                if (state.wn.doneIds.has(id)) continue;                        // 已处理过终态（防周期重发）
+                if (!state.wn.currentId) state.wn.currentId = id;              // 锁定新目标
+                if (id !== state.wn.currentId) continue;
+                if (entry.status === STATUS_SUCCEEDED) {
+                    state.wn.doneIds.add(id);
+                    onWaypointReached();
+                } else if (entry.status === STATUS_ABORTED) {
+                    state.wn.doneIds.add(id);
+                    abortRun(`航点 ${state.wn.idx + 1} 执行失败 (ABORTED)`);
+                } else if (entry.status === STATUS_CANCELED) {
+                    state.wn.doneIds.add(id);
+                    abortRun('导航被取消');
+                }
+            }
+        }
+
+        function trackSingleGoal(entries) {
+            if (state.wn.running || state.goalTrack.state !== 'sent') return;
+            for (const entry of entries) {
+                const id = uuidToString(entry.goal_info.goal_id.uuid);
+                if (state.goalTrack.snapshot && state.goalTrack.snapshot.has(id)) continue;
+                if (!state.goalTrack.currentId) state.goalTrack.currentId = id;
+                if (id !== state.goalTrack.currentId) continue;
+                if (entry.status === STATUS_SUCCEEDED) { state.goalTrack.state = 'done'; setNavState('目标已到达 ✅'); }
+                else if (entry.status === STATUS_ABORTED) { state.goalTrack.state = 'failed'; setNavState('目标失败 ❌'); }
+                else if (entry.status >= 1 && entry.status <= 3) { setNavState('导航执行中...'); }
+            }
+        }
+
+        // ============================================
+        // 航点导航
+        // ============================================
+        function addWaypoint(x, y) {
+            state.waypoints.push({ x, y });
+            updateWaypointList();
+            requestDraw();
+            console.log(`添加航点 ${state.waypoints.length}: (${x.toFixed(2)}, ${y.toFixed(2)})`);
+        }
+
+        function removeWaypoint(index) {
+            // 导航进行中删除航点会使后续索引错位，先终止当前任务
+            if (state.wn.running) stopWaypointNavigation(false);
+            state.waypoints.splice(index, 1);
+            updateWaypointList();
+            requestDraw();
+        }
+
+        function clearAllWaypoints() {
+            stopWaypointNavigation(true);
+            state.waypoints = [];
+            updateWaypointList();
+            requestDraw();
+        }
+
+        function updateWaypointList() {
+            elements.waypointCount.textContent = state.waypoints.length;
+            if (state.waypoints.length === 0) {
+                elements.waypointList.innerHTML = '<p style="color: #888; font-size: 0.85rem; text-align: center;">点击地图添加航点</p>';
+                return;
+            }
+            elements.waypointList.innerHTML = '';
+            state.waypoints.forEach((wp, i) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:4px 6px;font-size:0.85rem;border-bottom:1px solid #3a3d4e;';
+                const label = document.createElement('span');
+                label.textContent = `${i + 1}. (${wp.x.toFixed(2)}, ${wp.y.toFixed(2)})`;
+                label.style.color = (state.wn.running && state.wn.idx === i) ? '#51cf66' : '#e0e0e0';
+                const del = document.createElement('button');
+                del.textContent = '✕';
+                del.style.cssText = 'background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.9rem;';
+                del.addEventListener('click', () => removeWaypoint(i));
+                row.appendChild(label);
+                row.appendChild(del);
+                elements.waypointList.appendChild(row);
+            });
+        }
+
+        function startWaypointNavigation() {
+            if (!state.connected) { console.warn('未连接 rosbridge'); return; }
+            if (state.waypoints.length === 0) { setNavState('请先添加航点'); return; }
+            state.wn.running = true;
+            state.wn.idx = 0;
+            state.wn.currentId = null;
+            state.wn.doneIds = new Set();
+            updateWaypointList();
+            sendNextWaypoint();
+        }
+
+        function sendNextWaypoint() {
+            if (!state.wn.running) return;   // 停止/中断后不再补发（含 1s 续发定时器竞态）
+            const wp = state.waypoints[state.wn.idx];
+            if (!wp) { finishRun(); return; }
+            setNavState(`航点导航中 (${state.wn.idx + 1}/${state.waypoints.length})...`);
+            // 记录发送时刻的已有目标，避免误匹配旧状态
+            state.wn.snapshot = new Set(lastStatusUuidSet);
+            state.wn.currentId = null;
+            sendGoal(wp.x, wp.y, defaultGoalYaw(wp));
+            // 单航点超时保护
+            clearTimeout(state.wn.timer);
+            state.wn.timer = setTimeout(() => {
+                if (state.wn.running) {
+                    abortRun(`航点 ${state.wn.idx + 1} 超时 (${WAYPOINT_TIMEOUT_S}s)`);
+                    cancelGoal(true);   // 静默取消，保留超时提示
+                }
+            }, WAYPOINT_TIMEOUT_S * 1000);
+        }
+
+        function onWaypointReached() {
+            clearTimeout(state.wn.timer);
+            console.log(`航点 ${state.wn.idx + 1} 已到达`);
+            state.wn.idx += 1;
+            // 续发定时器统一放进 wn.timer，停止任务时才能一并清掉
+            if (state.wn.idx >= state.waypoints.length) {
+                if (elements.loopWaypointsCheckbox.checked) {
+                    state.wn.idx = 0;
+                    state.wn.timer = setTimeout(sendNextWaypoint, 1000);
+                } else {
+                    finishRun();
+                }
+            } else {
+                state.wn.timer = setTimeout(sendNextWaypoint, 1000);
+            }
+            updateWaypointList();
+        }
+
+        function stopWaypointNavigation(silent) {
+            clearTimeout(state.wn.timer);
+            const wasRunning = state.wn.running;
+            state.wn.running = false;
+            state.wn.currentId = null;
+            if (wasRunning) {
+                if (!silent) setNavState('航点导航已停止');
+                // 停止任务的同时取消正在执行的当前目标，否则机器人会跑完这一点
+                if (state.connected) cancelGoal(true);
+            }
+            updateWaypointList();
+        }
+
+        function abortRun(reason) {
+            clearTimeout(state.wn.timer);
+            state.wn.running = false;
+            setNavState(`⛔ ${reason}`);
+            updateWaypointList();
+            console.warn(reason);
+        }
+
+        function finishRun() {
+            clearTimeout(state.wn.timer);
+            state.wn.running = false;
+            setNavState('✅ 全部航点完成');
+            updateWaypointList();
+        }
+
+        // 目标朝向：默认指向点击点相对机器人的方向；机器人未知时取 0
+        function defaultGoalYaw(wp) {
+            if (state.robotPose) {
+                const dx = wp.x - state.robotPose.x, dy = wp.y - state.robotPose.y;
+                if (dx * dx + dy * dy > 0.01) return Math.atan2(dy, dx);
+                return state.robotPose.yaw;
+            }
+            return 0;
+        }
+
+        function setNavState(text) {
+            elements.navState.textContent = text;
+        }
+
+        function setLoadingText(text) {
+            elements.loadingText.textContent = text;
+        }
+
+        // ============================================
+        // 点击模式
+        // ============================================
+        function setMode(mode) {
+            if (state.mode === 'waypoint' && mode !== 'waypoint') stopWaypointNavigation(true);
+            state.mode = mode;
+            document.getElementById('mode-goal').classList.toggle('active', mode === 'goal');
+            document.getElementById('mode-waypoint').classList.toggle('active', mode === 'waypoint');
+            document.getElementById('mode-pose').classList.toggle('active', mode === 'pose');
+            elements.waypointPanel.style.display = mode === 'waypoint' ? 'block' : 'none';
+            elements.canvas.classList.toggle('mode-waypoint', mode === 'waypoint');
+            elements.canvas.classList.toggle('mode-pose', mode === 'pose');
+            elements.modeHint.textContent =
+                mode === 'goal' ? '点击设置导航目标' :
+                mode === 'waypoint' ? '点击添加航点' : '点击设置初始位姿（朝向为机器人指向点击处）';
+        }
+
+        // ============================================
+        // Canvas 渲染
+        // ============================================
+        function initCanvas() {
+            const canvas = elements.canvas;
+            const resize = () => {
+                const wrap = document.getElementById('nav-map');
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = wrap.clientWidth * dpr;
+                canvas.height = wrap.clientHeight * dpr;
+                canvas.style.width = wrap.clientWidth + 'px';
+                canvas.style.height = wrap.clientHeight + 'px';
+                requestDraw();
+            };
+            window.addEventListener('resize', resize);
+            resize();
+
+            // 滚轮缩放（以光标为中心）
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                zoomAtView(e.clientX - rect.left, e.clientY - rect.top, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+            }, { passive: false });
+
+            // 拖拽平移 + 点击
+            let dragging = false, moved = false, lastX = 0, lastY = 0, downX = 0, downY = 0;
+            canvas.addEventListener('mousedown', (e) => {
+                dragging = true; moved = false;
+                lastX = downX = e.clientX; lastY = downY = e.clientY;
+                canvas.classList.add('panning');
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (dragging) {
+                    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+                    if (Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY) > 5) moved = true;
+                    if (moved) {
+                        state.view.offsetX += dx;
+                        state.view.offsetY += dy;
+                        requestDraw();
+                    }
+                    lastX = e.clientX; lastY = e.clientY;
+                }
+            });
+            window.addEventListener('mouseup', (e) => {
+                if (!dragging) return;
+                dragging = false;
+                canvas.classList.remove('panning');
+                if (!moved && e.target === canvas) handleMapClick(e);
+            });
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                state.lastMouse = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+                updateCoordinates();
+            });
+            // 机器人朝向变化时同步刷新底部坐标栏
+            setInterval(() => { if (state.lastMouse) updateCoordinates(); }, 500);
+
+            // 渲染循环（脏标记驱动）
+            const loop = () => {
+                if (state.dirty) { state.dirty = false; draw(); }
+                requestAnimationFrame(loop);
+            };
+            requestAnimationFrame(loop);
+        }
+
+        function requestDraw() { state.dirty = true; }
+
+        function updateCoordinates() {
+            const w = state.lastMouse || { x: 0, y: 0 };
+            const yawDeg = state.robotPose ? ((state.robotPose.yaw * 180 / Math.PI + 360) % 360).toFixed(1) : '0.0';
+            elements.coordinates.textContent = `X: ${w.x.toFixed(2)} m | Y: ${w.y.toFixed(2)} m | θ: ${yawDeg}°`;
+        }
+
+        function screenToWorld(sx, sy) {
+            return { x: (sx - state.view.offsetX) / state.view.scale, y: (state.view.offsetY - sy) / state.view.scale };
+        }
+
+        function worldToScreen(wx, wy) {
+            return { x: wx * state.view.scale + state.view.offsetX, y: state.view.offsetY - wy * state.view.scale };
+        }
+
+        // 以屏幕点 (mx, my) 为锚点缩放，保证光标下的世界坐标不动
+        function zoomAtView(mx, my, factor) {
+            const wx = (mx - state.view.offsetX) / state.view.scale;
+            const wy = (state.view.offsetY - my) / state.view.scale;
+            state.view.scale = Math.min(2000, Math.max(2, state.view.scale * factor));
+            state.view.offsetX = mx - wx * state.view.scale;
+            state.view.offsetY = my + wy * state.view.scale;
+            requestDraw();
+        }
+
+        function zoom(factor) {
+            const canvas = elements.canvas;
+            zoomAtView(canvas.clientWidth / 2, canvas.clientHeight / 2, factor);
+        }
+
+        function fitMap() {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            const grids = [state.grids.map, state.grids.gcost, state.grids.lcost];
+            for (const g of grids) {
+                if (!g || !g.info) continue;
+                const { resolution, width, height, origin } = g.info;
+                minX = Math.min(minX, origin.position.x);
+                minY = Math.min(minY, origin.position.y);
+                maxX = Math.max(maxX, origin.position.x + width * resolution);
+                maxY = Math.max(maxY, origin.position.y + height * resolution);
+            }
+            if (minX === Infinity) {
+                for (const p of state.pathPoses) {
+                    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+                    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+                }
+            }
+            if (state.robotPose) {
+                minX = Math.min(minX, state.robotPose.x); maxX = Math.max(maxX, state.robotPose.x);
+                minY = Math.min(minY, state.robotPose.y); maxY = Math.max(maxY, state.robotPose.y);
+            }
+            if (minX === Infinity) return;
+            const canvas = elements.canvas;
+            const bw = Math.max(maxX - minX, 1), bh = Math.max(maxY - minY, 1);
+            const scale = Math.min(canvas.clientWidth / bw, canvas.clientHeight / bh) * 0.9;
+            state.view.scale = scale;
+            state.view.offsetX = canvas.clientWidth / 2 - (minX + maxX) / 2 * scale;
+            state.view.offsetY = canvas.clientHeight / 2 + (minY + maxY) / 2 * scale;
+            state.view.fitted = true;
+            requestDraw();
+        }
+
+        // OccupancyGrid -> 离屏 canvas（1 cell = 1 像素，绘制时翻转 y）
+        function rebuildGridImages() {
+            for (const key of Object.keys(state.grids)) {
+                if (state.grids[key]) rebuildGridImage(key);
+            }
+            requestDraw();
+        }
+
+        function rebuildGridImage(key) {
+            const grid = state.grids[key];
+            if (!grid || !grid.info) return;
+            const { width, height } = grid.info;
+            const dark = document.getElementById('map-theme').checked;
+            const off = document.createElement('canvas');
+            off.width = width; off.height = height;
+            const ctx = off.getContext('2d');
+            const img = ctx.createImageData(width, height);
+            const data = img.data;
+            const isCostmap = key !== 'map';
+            for (let row = 0; row < height; row++) {
+                // OccupancyGrid 第 0 行是世界坐标最高处（画布顶部），与 ImageData 行序一致
+                for (let col = 0; col < width; col++) {
+                    const v = grid.data[row * width + col];
+                    const idx = (row * width + col) * 4;
+                    let r = 0, g = 0, b = 0, a = 0;
+                    if (isCostmap) {
+                        // Nav2 costmap 发布值域: -1 未知 / 0 空闲 / 1..98 膨胀代价 / 99 贴障 / 100 致命
+                        if (v >= 99) {
+                            r = 224; g = 49; b = 49; a = 200;   // 致命/贴障障碍
+                        } else if (v > 0) {
+                            // 膨胀代价：蓝 -> 红 渐变 + 透明度随代价上升
+                            const t = v / 98;
+                            const hue = 220 * (1 - t);
+                            const [hr, hg, hb] = hslToRgb(hue / 360, 0.85, 0.5);
+                            r = hr; g = hg; b = hb;
+                            a = Math.round(255 * (0.10 + 0.40 * Math.pow(t, 0.7)));
+                        }
+                        // v === -1（未知）或 0：透明
+                    } else {
+                        if (v === -1) {
+                            if (!dark) { r = 200; g = 200; b = 200; a = 90; }   // 未知区域（亮色主题浅灰）
+                        } else if (v === 0) {
+                            if (dark) { r = 38; g = 43; b = 61; a = 255; }      // 空闲
+                            else { r = 242; g = 242; b = 242; a = 255; }
+                        } else if (v >= 65) {
+                            if (dark) { r = 205; g = 211; b = 224; a = 255; }   // 占据
+                            else { r = 43; g = 43; b = 43; a = 255; }
+                        } else {
+                            const t = v / 100;   // 中间值插值
+                            if (dark) { r = 38 + (205 - 38) * t; g = 43 + (211 - 43) * t; b = 61 + (224 - 61) * t; a = 255; }
+                            else { r = 242 - (242 - 43) * t; g = 242 - (242 - 43) * t; b = 242 - (242 - 43) * t; a = 255; }
+                        }
+                    }
+                    data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = a;
+                }
+            }
+            ctx.putImageData(img, 0, 0);
+            state.gridImages[key] = off;
+        }
+
+        function hslToRgb(h, s, l) {
+            const f = (n) => {
+                const k = (n + h * 12) % 12;
+                const a = s * Math.min(l, 1 - l);
+                return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+            };
+            return [f(0), f(8), f(4)];
+        }
+
+        function draw() {
+            const canvas = elements.canvas;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+            ctx.imageSmoothingEnabled = false;
+
+            // --- 栅格图层 ---
+            // 非 map 系的栅格（如局部代价地图在 odom 系）需经 TF 变换到 map 再绘制，
+            // 否则 map->odom 修正量非零时会整体画错位置。
+            const drawGrid = (key, enabled) => {
+                const grid = state.grids[key];
+                const img = state.gridImages[key];
+                if (!enabled || !img || !grid) return;
+                const { resolution, width, height, origin } = grid.info;
+                let px = origin.position.x, py = origin.position.y, pyaw = 0;
+                const frame = grid.header && grid.header.frame_id ? grid.header.frame_id : 'map';
+                if (frame !== 'map') {
+                    const tf = lookupTf(FRAME_MAP, frame);
+                    if (tf) {
+                        const P = composePose(tf, { x: px, y: py, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 });
+                        px = P.x; py = P.y;
+                        pyaw = yawFromQuaternion({ x: P.qx, y: P.qy, z: P.qz, w: P.qw });
+                    }
+                }
+                const p = worldToScreen(px, py);
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                if (pyaw) ctx.rotate(-pyaw);   // 世界逆时针 = 画布顺时针（y 翻转）
+                ctx.scale(state.view.scale, -state.view.scale);
+                ctx.drawImage(img, 0, 0, width * resolution, height * resolution);
+                ctx.restore();
+            };
+            drawGrid('map', elements.layerMap.checked);
+            drawGrid('gcost', elements.layerGlobalCostmap.checked);
+            drawGrid('lcost', elements.layerLocalCostmap.checked);
+
+            // --- 规划路径 ---
+            if (elements.layerPath.checked && state.pathPoses.length > 1) {
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                state.pathPoses.forEach((p, i) => {
+                    const s = worldToScreen(p.x, p.y);
+                    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+                });
+                ctx.stroke();
+            }
+
+            // --- 航点 ---
+            state.waypoints.forEach((wp, i) => {
+                const s = worldToScreen(wp.x, wp.y);
+                const active = state.wn.running && state.wn.idx === i;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, 11, 0, Math.PI * 2);
+                ctx.fillStyle = active ? '#51cf66' : '#ffc947';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = active ? '#2f9e44' : '#b08a2e';
+                ctx.stroke();
+                ctx.fillStyle = '#1a1d2e';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(String(i + 1), s.x, s.y + 1);
+            });
+
+            // --- 目标标记 ---
+            if (state.goalMarker) {
+                const s = worldToScreen(state.goalMarker.x, state.goalMarker.y);
+                ctx.save();
+                ctx.translate(s.x, s.y);
+                ctx.rotate(-state.goalMarker.yaw);
+                ctx.beginPath();
+                ctx.moveTo(16, 0);
+                ctx.lineTo(-8, -10);
+                ctx.lineTo(-4, 0);
+                ctx.lineTo(-8, 10);
+                ctx.closePath();
+                ctx.fillStyle = '#ff4d4f';
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // --- 机器人 ---
+            if (elements.layerRobot.checked && state.robotPose) {
+                const s = worldToScreen(state.robotPose.x, state.robotPose.y);
+                const age = (Date.now() - state.robotPose.t) / 1000;
+                ctx.save();
+                ctx.translate(s.x, s.y);
+                ctx.rotate(-state.robotPose.yaw);
+                ctx.globalAlpha = age > 2 ? 0.35 : 1;
+                ctx.beginPath();
+                ctx.moveTo(18, 0);
+                ctx.lineTo(-12, -11);
+                ctx.lineTo(-6, 0);
+                ctx.lineTo(-12, 11);
+                ctx.closePath();
+                ctx.fillStyle = '#4ade80';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#166532';
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // ============================================
+        // 地图点击处理（按当前模式）
+        // ============================================
+        function handleMapClick(e) {
+            const rect = elements.canvas.getBoundingClientRect();
+            const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+
+            if (state.mode === 'waypoint') {
+                addWaypoint(w.x, w.y);
+            } else if (state.mode === 'pose') {
+                // 拖动设定朝向：以点击点相对机器人的方向作为朝向
+                const yaw = state.robotPose ? Math.atan2(w.y - state.robotPose.y, w.x - state.robotPose.x) : 0;
+                sendInitialPose(w.x, w.y, yaw);
+            } else {
+                sendGoal(w.x, w.y, defaultGoalYaw(w));
+                setNavState('目标已发送...');
+            }
+        }
+
+        // ============================================
+        // 统计
+        // ============================================
+        function countMsg() {
+            state.msgCount++;
+            state.fpsCount++;
+        }
+
+        function updateFps() {
+            const now = Date.now();
+            const elapsed = (now - state.lastFps) / 1000;
+            const hz = Math.round(state.fpsCount / elapsed);
+            state.fpsCount = 0;
+            state.lastFps = now;
+            if (state.connected) {
+                elements.statusText.textContent = `已连接 · ${hz} msg/s`;
+            }
+        }
+
+        // ============================================
+        // Start
+        // ============================================
+        init();
+    </script>
+</body>
+
+</html>

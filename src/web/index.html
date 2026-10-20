@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Center</title>
+
+    <!-- Robot Web Tools Libraries：本地优先，CDN 兜底 -->
+    <script src="lib/eventemitter2.min.js"></script>
+    <script>window.EventEmitter2 || document.write('<script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.min.js"><\/script>')</script>
+    <script src="lib/roslib.min.js"></script>
+    <script>window.ROSLIB || document.write('<script src="https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js"><\/script>')</script>
+    <script src="lib/three.min.js"></script>
+    <script>window.THREE || document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.89.0/build/three.min.js"><\/script>')</script>
+    <script src="lib/ros3d.min.js"></script>
+    <script>window.ROS3D || document.write('<script src="https://cdn.jsdelivr.net/npm/ros3d@1.1.0/build/ros3d.min.js"><\/script>')</script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Robot <span class="logo-kitti">Center</span></h1>
+                <div class="status-indicator" id="status-indicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Disconnected</span>
+                </div>
+            </div>
+
+            <!-- Connection Section -->
+            <section class="config-section">
+                <h2>Connection</h2>
+                <div class="input-group">
+                    <label>ROSBridge URL</label>
+                    <input type="text" id="rosbridge-url" value="ws://localhost:9090" placeholder="ws://localhost:9090">
+                </div>
+                <button id="connect-btn" class="btn btn-primary">Connect</button>
+            </section>
+
+            <!-- Configuration Section -->
+            <section class="config-section">
+                <h2>Configuration</h2>
+                <div class="input-group">
+                    <label>Fixed Frame</label>
+                    <input type="text" id="fixed-frame" value="odom" placeholder="odom">
+                </div>
+                <div class="input-group">
+                    <label>Point Cloud Topic</label>
+                    <input type="text" id="pointcloud-topic" value="/registered_scan"
+                        placeholder="/registered_scan">
+                </div>
+            </section>
+
+            <!-- Point Cloud Color Section -->
+            <section class="config-section">
+                <h2>Point Cloud Color</h2>
+                <div class="input-group">
+                    <label>Color Map</label>
+                    <select id="color-map" class="select-input">
+                        <option value="auto">Auto (RGB/Intensity)</option>
+                        <option value="green">Solid Green</option>
+                        <option value="cyan">Solid Cyan</option>
+                        <option value="white">White</option>
+                    </select>
+                </div>
+                <button id="apply-color-btn" class="btn btn-secondary">Apply Colors</button>
+            </section>
+
+            <!-- Robot Control Section -->
+            <section class="config-section">
+                <h2>Robot Control 🎮</h2>
+
+                <!-- Speed Controls（上限与 Nav2 DWB 限幅一致） -->
+                <div class="input-group">
+                    <label>Linear Speed: <span id="linear-speed-value">0.15</span> m/s</label>
+                    <input type="range" id="linear-speed" class="slider" min="0" max="0.26" step="0.01" value="0.15">
+                </div>
+                <div class="input-group">
+                    <label>Angular Speed: <span id="angular-speed-value">0.5</span> rad/s</label>
+                    <input type="range" id="angular-speed" class="slider" min="0" max="1.0" step="0.05" value="0.5">
+                </div>
+
+                <!-- Directional Pad -->
+                <div class="control-pad">
+                    <div class="control-row">
+                        <button class="control-btn" data-direction="forward-left">↖</button>
+                        <button class="control-btn" data-direction="forward">↑</button>
+                        <button class="control-btn" data-direction="forward-right">↗</button>
+                    </div>
+                    <div class="control-row">
+                        <button class="control-btn" data-direction="left">←</button>
+                        <button class="control-btn control-stop" id="stop-btn">⏹</button>
+                        <button class="control-btn" data-direction="right">→</button>
+                    </div>
+                    <div class="control-row">
+                        <button class="control-btn" data-direction="backward-left">↙</button>
+                        <button class="control-btn" data-direction="backward">↓</button>
+                        <button class="control-btn" data-direction="backward-right">↘</button>
+                    </div>
+                </div>
+
+                <!-- Current Velocity Display -->
+                <div class="velocity-display">
+                    <div class="velocity-item">
+                        <span class="velocity-label">Linear:</span>
+                        <span class="velocity-value" id="current-linear">0.00</span>
+                    </div>
+                    <div class="velocity-item">
+                        <span class="velocity-label">Angular:</span>
+                        <span class="velocity-value" id="current-angular">0.00</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <div class="sidebar-footer">
+                <p>ROS2 / Nav2 · Robot Web Tools</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="workspace-header">
+                <div>
+                    <p class="workspace-kicker">ROBOT OPERATIONS / LIVE TELEMETRY</p>
+                    <h2>Robot Center</h2>
+                </div>
+                <div class="workspace-metrics" aria-label="系统概览">
+                    <span><b class="metric-dot"></b>ROS2 Bridge</span>
+                    <span>Frame <b id="workspace-frame">odom</b></span>
+                    <span>Point cloud <b>48k max</b></span>
+                </div>
+            </div>
+            <!-- 3D Point Cloud Viewer -->
+            <div class="top-row">
+                <section class="panel panel-3d">
+                    <div class="panel-header">
+                        <h3>3D Point Cloud (/registered_scan, odom)</h3>
+                        <span class="badge badge-live">LIVE</span>
+                    </div>
+                    <div class="panel-body">
+                        <div id="viewer-3d" class="viewer-3d-container"></div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- IMU Data -->
+            <div class="bottom-row">
+                <section class="panel panel-imu">
+                    <div class="panel-header">
+                        <h3>IMU Data (/livox/imu)</h3>
+                        <span class="badge">Sensor</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="data-grid">
+                            <div class="data-group">
+                                <h4>Orientation</h4>
+                                <div class="data-row">
+                                    <span class="data-label">Roll:</span>
+                                    <span class="data-value" id="imu-roll">--</span>
+                                </div>
+                                <div class="data-row">
+                                    <span class="data-label">Pitch:</span>
+                                    <span class="data-value" id="imu-pitch">--</span>
+                                </div>
+                                <div class="data-row">
+                                    <span class="data-label">Yaw:</span>
+                                    <span class="data-value" id="imu-yaw">--</span>
+                                </div>
+                            </div>
+                            <div class="data-group">
+                                <h4>Linear Acceleration</h4>
+                                <div class="data-row">
+                                    <span class="data-label">X:</span>
+                                    <span class="data-value" id="imu-accel-x">--</span>
+                                </div>
+                                <div class="data-row">
+                                    <span class="data-label">Y:</span>
+                                    <span class="data-value" id="imu-accel-y">--</span>
+                                </div>
+                                <div class="data-row">
+                                    <span class="data-label">Z:</span>
+                                    <span class="data-value" id="imu-accel-z">--</span>
+                                </div>
+                            </div>
+                            <div class="data-group">
+                                <h4>Angular Velocity</h4>
+                                <div class="data-row">
+                                    <span class="data-label">X:</span>
+                                    <span class="data-value" id="imu-gyro-x">--</span>
+                                </div>
+                                <div class="data-row">
+                                    <span class="data-label">Y:</span>
+                                    <span class="data-value" id="imu-gyro-y">--</span>
+                                </div>
+                                <div class="data-row">
+                                    <span class="data-label">Z:</span>
+                                    <span class="data-value" id="imu-gyro-z">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Application Logic -->
+    <script src="app.js"></script>
+</body>
+
+</html>

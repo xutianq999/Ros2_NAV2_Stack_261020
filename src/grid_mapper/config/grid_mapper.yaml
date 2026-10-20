@@ -1,0 +1,70 @@
+# grid_mapper：从 Super-LIO 的逐帧点云长出 /map
+#
+# 探索模式下用它取代 map_server（两者都发 /map，不能同时跑）。
+# Nav2 全局代价地图的 static_layer 配了 map_subscribe_transient_local: true，
+# 会自动订阅这张图，并随地图变大而扩张代价地图。
+grid_mapper:
+  ros__parameters:
+    # 输入。Super-LIO 直接把"当前帧在 world 帧下的点云"发在 /lio/cloud_world。
+    # 桥接层的 /registered_scan 是同一份消息原样转发，接哪条都行。
+    cloud_topic: /lio/cloud_world
+    odom_topic: /lio/odom
+
+    # 输出。要与 Nav2 全局代价地图的 global_frame 一致
+    map_topic: /map
+    map_frame: map
+
+    # 与 nav2_params.yaml 里 global_costmap 的 resolution 保持一致，
+    # 免得 static_layer 还要重采样
+    resolution: 0.05
+
+    # 高度带（map 帧）。map 帧原点是启动时 IMU 的位置，地面约在 -0.32 m。
+    # 下界 -0.20 约等于离地 0.12 m：既能排除地面，又不会把低矮障碍排除在
+    # hit 之外（原来的 0.0 实际是离地 0.32 m，低矮障碍会被射线刷成 free）。
+    # 上界要和 /scan 切片（Pointcloud2d_3d.yaml 的 max_height: 1.20，相对 livox_frame）
+    # 对齐。原来的 1.5 比 /scan 高 0.3 m：门口上方悬空物体（点云 z≈1.4~2.5）最低的
+    # 一截会被记成 hit，车靠近时在走廊里凭空长出一块障碍，靠远又消失，导致门口前沿
+    # 忽有忽无。车身高度（约 0.5 m）以上的悬空物不该进 2D 地图。
+    z_min: -0.20
+    z_max: 1.2
+
+    # 比这更近的点视为车体自身回波，不参与
+    min_range: 0.3
+
+    # 射线清理距离上限：越远越省算力，远处留给"未确认"
+    max_clear_range: 10.0
+
+    # 每帧最多用多少点（抽稀），控制单帧 CPU
+    max_points: 8000
+    # 射线每隔几个格子打一个 miss（2 = 每 0.1 m 一个）
+    ray_stride: 2
+
+    # 仅影响保存用的 /map：同一格需跨帧稳定观测 >=2秒，才开始写入占据证据。
+    # 观测间隔 >0.5秒或射线确认空闲，会重新计时，过滤走动行人的短时足迹。
+    # /scan、局部/全局实时障碍层和碰撞保护仍即时看见人，不经过此过滤。
+    # 这不是语义识别人：站立超过确认时间的人也可能入图，离开后靠空闲射线清除。
+    # 已确认墙体不会因离开视野而超时消失。设 confirmation_time=0 恢复原累积方式。
+    static_confirmation_time: 2.0
+    static_max_gap: 0.5
+    # 在15cm邻域判断稳定性，允许墙面回波在相邻5cm格子间抖动；写图仍是5cm精度。
+    static_confirmation_resolution: 0.15
+
+    # log-odds 累积：确认前不计命中，确认后沿用每个命中点 +4 / 落空 -1；occupied>=8、
+    # free<=-3（约 3 次落空），其余为未知 -1。
+    # 落空权重刻意压得比命中低：栅栏、植被这类半透结构射线会穿过去，落空给太重
+    # 会把真实障碍刷成空地。实测（同一份 248 s 数据包，对比先验点云）：
+    #   命中 +4/落空 -2 + 每帧 2000 点  -> 占据格精度 95.0%@0.10m，召回 56.4%@0.10m，单帧 2.1 ms
+    #   命中 +4/落空 -1 + 每帧 8000 点  -> 占据格精度 94.1%@0.10m，召回 59.8%@0.10m，单帧 6.1 ms
+    # 即当前默认值。CPU 还有余量，优先要召回。
+    hit_increment: 4
+    miss_increment: -1
+    logodds_min: -24
+    logodds_max: 32
+    occupied_threshold: 8
+    free_threshold: -3
+
+    # 开局预分配的方形半径（米），之后随探索自动扩张
+    initial_extent: 20.0
+
+    # 发布频率。1 Hz 足够（静态层是按图更新，不是按帧）
+    publish_rate: 1.0

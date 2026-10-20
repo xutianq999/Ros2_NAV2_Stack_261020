@@ -1,0 +1,27 @@
+frame: map
+points:
+- id: 1
+  name: point_1
+  x: 0.5904
+  y: 0.2367
+  yaw: -0.2533
+- id: 2
+  name: point_2
+  x: 9.4901
+  y: 0.7667
+  yaw: -3.0879
+- id: 3
+  name: point_3
+  x: 13.2651
+  y: -12.4468
+  yaw: -0.8496
+- id: 4
+  name: point_4
+  x: 8.8735
+  y: -20.8459
+  yaw: -2.6276
+- id: 5
+  name: point_5
+  x: 15.9111
+  y: -24.7656
+  yaw: -1.0215

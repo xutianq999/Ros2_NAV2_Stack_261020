@@ -1,0 +1,48 @@
+# 编译与系统生成目录
+build/
+install/
+log/
+__pycache__/
+*.py[cod]
+*.o
+*.a
+
+# 运行时数据（建图/探索记录、任务数据库、上传地图）
+runs/
+web_backend_data/
+scripts/output/
+0830new/
+src/me_nav2_bringup/map/explore_*
+
+# 大型二进制文件与深度学习模型
+*.pcd
+*.db3
+*.bag
+*.mcap
+*.pt
+*.pth
+*.onnx
+*.weights
+*.engine
+
+# 第三方构建产物
+src/registration/KISS-Matcher/cpp/kiss_matcher/build/
+
+# Node / 前端构建产物
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 本地密钥与语音 Agent 配置（.env.example 仍会提交）
+.env
+*.yaml.bak
+
+# 压缩包
+*.zip
+
+# 本地助手/编辑器配置
+.zcode/
+.agents/
+.codex/
+.claude/
+CLAUDE.md

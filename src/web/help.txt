@@ -1,0 +1,16 @@
+# 快速命令（详见同目录 README.md）
+
+# 1) 一次性安装 rosbridge
+sudo apt install ros-humble-rosbridge-suite
+
+# 2) 启动导航栈后，一键启动网页服务（rosbridge + http 静态服务）
+./scripts/web_start.sh
+
+# 或手动：
+source /opt/ros/humble/setup.bash
+ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+cd src/web && python3 -m http.server 5500 --bind 0.0.0.0
+
+# 浏览器访问
+#   导航页: http://<机器人IP>:5500/navigation.html
+#   仪表盘: http://<机器人IP>:5500/index.html

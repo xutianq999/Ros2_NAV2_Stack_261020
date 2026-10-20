@@ -1,0 +1,7 @@
+sudo modprobe gs_usb
+  sudo ip link set can0 up type can bitrate 500000
+  candump can0
+
+  确认 CAN 有数据后：
+
+  ros2 launch me_nav2_bringup bunker_mini2_base.launch.py

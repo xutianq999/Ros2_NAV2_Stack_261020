@@ -1,0 +1,115 @@
+# explore_lite（前沿探索）参数 —— 适配本工程
+#
+# 上游默认值有两处与本工程不符，这里已改：
+#   robot_base_frame  上游写 base_link，本工程统一用 base_footprint
+#   costmap_topic     上游写 map，本工程用 Nav2 全局代价地图（含未知区域）
+#
+# 为什么用 /global_costmap/costmap 而不是 /map：
+#   探索时"未知区域"必须体现在栅格上，前沿就是 free 与 unknown 的边界。
+#   本工程全局代价地图已设 track_unknown_space: true，未知格为 -1，满足条件；
+#   而且它和规划器看到的是同一张图，前沿点不会落在规划器眼里的障碍上。
+#   前提是 /map 得是"实时增长"的图（slam_toolbox 或自建栅格节点），
+#   不能是 map_server 加载的静态先验图，否则永远只有一圈边界、探索不出去。
+/**:
+  ros__parameters:
+    robot_base_frame: base_footprint
+
+    costmap_topic: /global_costmap/costmap
+    costmap_updates_topic: /global_costmap/costmap_updates
+
+    # 探索结束后是否回到起点。false = 原地停住。
+    # 之前设 true 时，探索一结束就会把车送回起点，表现为“手动出去又被叫回来”。
+    return_to_init: false
+
+    # 每隔多久重算一次前沿目标。0.15(上游默认)≈6.7s，对履带车偏快，先给 1.0s≈3s
+    planner_frequency: 0.33
+
+    # 目标多久没进展就判为卡住，加入黑名单
+    progress_timeout: 30.0
+    # 本地里程计确认车是否真的平移；原地失败不持续拉黑前沿或假报完成。
+    progress_frame: odom
+    immobile_distance: 0.05
+    immobile_failure_limit: 2
+
+    # 前沿列表为空时的等待时限（秒），超时后判定"探索完成"。
+    # 上游默认 30s；贴墙/临时遮挡导致前沿全被过滤时，30s 会让探索过早结束。
+    # 注意：所有前沿都被黑名单/give-up 过滤时，实际等待时间取
+    # max(本值, blacklist_timeout + 5)，避免黑名单还没过期就判完成。
+    no_valid_frontier_grace: 60.0
+
+    # 前沿打分权重：到机器人的距离 / 朝向 / 信息增益
+    # 履带车转向是原地转，orientation_scale 一般保持 0
+    # 代价 = potential_scale × 路径距离(米) − gain_scale × min(前沿宽度, max_gain_size)(米)。
+    # 路径距离是沿已知可通行格走过去的长度，不是直线距离。
+    # potential_scale 调高到 5.0：增加距离惩罚，避免跨越 30 米的超长距离跳跃
+    potential_scale: 5.0
+    orientation_scale: 0.0
+    gain_scale: 1.0
+    # 前沿宽度计入收益的上限（米），避免一个很宽的远开口压过近处的前沿
+    max_gain_size: 2.0
+
+    # 目标承诺：已有目标在走时，只有新的最优前沿代价低 switch_improvement
+    # （相对值，0.3 = 30%）以上才切换，防止在两个岔路之间来回跳。
+    # 当前目标按质心最近邻匹配（goal_track_radius 米内），前沿长大时质心漂移不算换目标。
+    # RViz 里设方向引导或划边界会主动放弃一次承诺。goal_commit=false 退回每周期重选。
+    goal_commit: true
+    switch_improvement: 0.3
+    goal_track_radius: 1.5
+
+    # 前沿簇的最小尺寸（米）。太小会去追墙缝、门框这种碎前沿；
+    # BUNKER 车宽 0.69m，给 0.75 是下限，场地杂可以加到 1.0
+    min_frontier_size: 0.75
+
+    transform_tolerance: 0.3
+
+    # 启动宽限（秒）：costmap 已收到但还没有前沿时，不立即判定"探索完成"。
+    # 给 grid_mapper / Super-LIO 留出长图和建图时间。
+    startup_grace: 10.0
+
+    # 目标保持距离（米）：新前沿离当前目标小于该值时视为同一目标，不重发。
+    # 避免频繁抢占导致 Humble 下 ABORTED 结果误拉黑前沿。
+    goal_hold_distance: 0.25
+
+    # 黑名单过期时间（秒）：超过该时间的拉黑记录自动失效，允许重新尝试。
+    blacklist_timeout: 120.0
+
+    # 目标丢失宽限（秒）：已承诺的前沿暂时从列表里消失（例如被一块时有时无的
+    # 障碍切断了路径）时，继续朝它走这么久，而不是立刻改选远处另一个再折回来。
+    # 0 = 关闭。
+    goal_lost_grace: 15.0
+
+    # 进不去就放弃：同一片区域（giveup_radius 米内）在 giveup_window 秒内被
+    # “离开后又回来”重选超过 max_goal_attempts 次，就放弃它 giveup_timeout 秒。
+    # 用户给了方向引导、或重新划了边界时，放弃记录清零，引导期间也不放弃。
+    # max_goal_attempts = 0 关闭。
+    max_goal_attempts: 3
+    giveup_window: 180.0
+    giveup_timeout: 600.0
+    giveup_radius: 1.0
+
+    # 可视化探索边界：由 exploration_ui 发布（RViz Publish Point 点选后 commit）。
+    # 空多边形 / 空 topic = 不限制。
+    bounds_topic: /exploration/bounds
+
+    # 方向引导：由 exploration_ui 从 RViz 2D Goal Pose 转发。
+    # bias   = 给偏离引导方向的 frontier 增加代价（软引导）
+    # filter = 只保留引导锥内的 frontier；锥内为空时自动回退到全部
+    guide_topic: /exploration/guide
+    guide_clear_topic: /exploration/guide_clear
+    # 用户给了方向就以它为主：filter 只保留锥内前沿，锥外的不再参与竞争
+    # （bias 只是加代价，近处的锥外前沿仍会把车拉走）。锥内一个前沿都没有时
+    # 才回退到全部前沿。0 = 引导不过期，直到用 clear_guide 清除或重新点选。
+    guide_mode: filter
+    guide_weight: 2.0
+    guide_cone_deg: 120.0
+    guide_timeout: 300.0
+    # 点击引导点后直接作为高优先级导航目标（吸附到附近自由格），
+    # 而不是只做方向过滤。false = 退回旧的方向过滤/加权行为。
+    guide_navigation: true
+    # 距离引导点小于该值时不单独发目标，避免反复朝脚下打点。
+    guide_min_distance: 0.5
+    # frontier 质心在未知格里；发送目标前先吸附到附近已知 free 格，
+    # 这样 allow_unknown=false 时仍能规划到前沿。
+    goal_snap_radius: 1.5
+
+    visualize: true

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MiMo 小车语音 Agent</title>
+  <meta name="description" content="小米 MiMo 语音对话 + BUNKER 小车运动控制 + Nav2 点位导航">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="ambient-glow glow-3"></div>
+
+  <div class="app-container">
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z" fill="url(#logo-gradient)"/>
+            <defs>
+              <linearGradient id="logo-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#FF6900"/>
+                <stop offset="1" stop-color="#FF9E00"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">MiMo Rover</h1>
+          <span class="brand-subtitle">语音对话 · 运动控制 · Nav2 点位导航</span>
+        </div>
+      </div>
+
+      <div class="header-badges">
+        <div class="status-pill" id="status-pill">
+          <span class="status-dot"></span>
+          <span class="status-text" id="status-text">待命</span>
+        </div>
+        <div class="model-badge" id="badge-model">
+          <span class="badge-icon">⚡</span>
+          <span>mimo-v2.6-flash</span>
+        </div>
+        <button class="btn-estop" id="btn-estop" title="触发安全层软件急停">🛑 急停</button>
+      </div>
+    </header>
+
+    <main class="main-stage">
+      <div class="visualizer-container">
+        <canvas id="waveform-canvas" class="waveform-canvas" width="600" height="260"></canvas>
+        <div class="orb-wrapper" id="orb-wrapper">
+          <div class="ai-orb" id="ai-orb">
+            <div class="orb-core"></div>
+            <div class="orb-ring ring-1"></div>
+            <div class="orb-ring ring-2"></div>
+            <div class="orb-ring ring-3"></div>
+          </div>
+        </div>
+        <div class="state-caption" id="state-caption">点击麦克风说话，或直接输入“前进一米”“去1号点位”</div>
+      </div>
+
+      <div class="side-column">
+        <section class="robot-panel" id="robot-panel">
+          <div class="robot-panel-header">
+            <span class="robot-title">🤖 小车状态</span>
+            <span class="robot-mode" id="robot-mode">待命</span>
+          </div>
+          <div class="robot-detail" id="robot-detail">正在读取状态…</div>
+          <div class="robot-chips">
+            <span class="chip" id="chip-odom">里程计 —</span>
+            <span class="chip" id="chip-scan">扫描 —</span>
+            <span class="chip" id="chip-cmd">输出 —</span>
+          </div>
+          <div class="robot-warning" id="robot-warning" hidden></div>
+          <div class="robot-actions">
+            <button class="quick-btn" data-cmd="前进">前进</button>
+            <button class="quick-btn" data-cmd="后退">后退</button>
+            <button class="quick-btn" data-cmd="左转">左转</button>
+            <button class="quick-btn" data-cmd="右转">右转</button>
+            <button class="quick-btn danger" data-cmd="停止">停止</button>
+            <button class="quick-btn" id="btn-release-estop">解除急停</button>
+          </div>
+          <div class="robot-hint">
+            语音指令示例：前进半米 / 后退 / 左转九十度 / 去1号点位 / 有哪些点位 / 急停
+          </div>
+        </section>
+
+        <div class="transcript-panel" id="transcript-panel">
+          <div class="panel-header">
+            <span class="panel-title">实时对话记录</span>
+            <button class="btn-clear" id="btn-clear" title="清空对话">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+              清空记录
+            </button>
+          </div>
+          <div class="messages-container" id="messages-container">
+            <div class="message-bubble assistant welcome-message">
+              <div class="msg-avatar">🤖</div>
+              <div class="msg-body">
+                <div class="msg-header">
+                  <span class="msg-author">MiMo Rover</span>
+                  <span class="msg-time">刚刚</span>
+                </div>
+                <div class="msg-content">你好！我可以陪你聊天，也能控制小车前进、后退、转向，或者导航到指定点位。直接说话或输入文字都可以。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="control-bar">
+      <div class="control-row">
+        <div class="mic-cluster">
+          <button class="btn-mic" id="btn-mic" aria-label="按住说话或点击切换麦克风">
+            <div class="mic-pulse-ring"></div>
+            <svg class="mic-icon" id="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+          </button>
+          <span class="mic-hint" id="mic-hint">点击开始录音</span>
+        </div>
+
+        <div class="input-cluster">
+          <div class="input-box">
+            <input type="text" id="input-text" placeholder="说或输入：前进半米 / 去1号点位 / 停止…" autocomplete="off">
+            <button class="btn-send" id="btn-send" aria-label="发送消息">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-cluster">
+          <div class="setting-item">
+            <label for="select-voice">音色:</label>
+            <select id="select-voice" class="select-styled">
+              <option value="冰糖" selected>冰糖</option>
+              <option value="茉莉">茉莉</option>
+              <option value="甜茶">甜茶</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label for="select-mode">模式:</label>
+            <select id="select-mode" class="select-styled">
+              <option value="tap" selected>点击切换</option>
+              <option value="hold">按住说话</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label for="input-token">令牌:</label>
+            <input type="password" id="input-token" class="select-styled token-input" placeholder="可选" autocomplete="off">
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

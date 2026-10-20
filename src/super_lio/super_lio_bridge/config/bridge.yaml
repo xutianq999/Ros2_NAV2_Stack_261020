@@ -1,0 +1,42 @@
+# Super-LIO -> Nav2 桥接参数
+
+super_lio_bridge:
+  ros__parameters:
+    # Super-LIO 的输出（话题名取自它的 ROSWrapper，均为标准消息类型）
+    lio_odom_topic: /lio/odom            # nav_msgs/Odometry，frame_id = world
+    lio_cloud_topic: /lio/cloud_world    # sensor_msgs/PointCloud2，frame_id = world
+
+    # Nav2 需要的坐标系
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_footprint
+
+    # Super-LIO 的 imu 帧 -> base_footprint：x y z roll pitch yaw
+    # 默认值取自 URDF：base_footprint ->(z+0.06) chassis ->(z+0.26) livox_frame，
+    # 即雷达（≈MID-360 内置 IMU）在 base 上方 0.32m。
+    # ⚠ 这是目前精度最弱的一环（残差约几厘米，因为 MID-360 内部 IMU 与雷达之间
+    #   还有 2~4cm 偏置）。要更准就在实机上量出 lidar/imu 到 base_footprint 的实际
+    #   偏移后改这里。它直接影响 map 系下的位姿精度。
+    imu_to_base: [0.0, 0.0, -0.32, 0.0, 0.0, 0.0]
+
+    # 输出
+    odom_topic: /odom
+    registered_scan_topic: /registered_scan
+    publish_cloud: true
+    tracking_ok_topic: /localization/tracking_ok
+    tracking_status_topic: /localization/tracking_status
+
+    # 位姿多久没更新就判为失效 -> 锁住自动驾驶（安全层的看门狗盯 tracking_ok）。
+    # Super-LIO 的 odom 约 20Hz，1.0s 有充足余量。
+    odom_timeout: 1.0
+    publish_rate: 50.0
+    # TF 时间戳补偿，抵消 LIO 处理延迟（与工程里既有的 +0.1s 约定一致）
+    stamp_offset: 0.1
+
+    # 定位来源
+    #   internal —— Super-LIO relocation 模式自己输出 map 系绝对位姿；
+    #               本节点用第一帧锚定 map->odom，之后保持不变。
+    #   external —— Super-LIO 以 mapping 模式只输出 odom 系里程计；
+    #               map->odom 由 small_gicp_relocalization 持续修正（2Hz），
+    #               本节点不再发布 map->odom，也不发布 tracking_ok/status。
+    localization_mode: internal

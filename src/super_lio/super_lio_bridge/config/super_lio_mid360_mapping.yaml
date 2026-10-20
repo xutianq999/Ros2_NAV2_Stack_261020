@@ -1,0 +1,82 @@
+# Super-LIO 建图/里程计配置（适配本工程的 BUNKER MINI 2.0 + Livox MID-360）
+#
+# 派生自上游 Super-LIO 的 config/livox_360.yaml，改动：
+#  1. save_map 改为 true —— 上游默认是 false，也就是**不会存地图**，而重定位模式
+#     依赖它存下来的 map.pcd。
+#  2. save_map_dir 改成绝对路径 —— 上游是相对路径 "map"，相对启动时的 CWD，
+#     换个目录启动就找不到/存错地方。
+#  3. 其余参数保持上游默认（外参 lidar_imu 已是 MID-360 的内置标定值）。
+#
+# 上游话题默认就是 /livox/lidar + /livox/imu，与本工程的驱动一致。
+
+/**:
+  ros__parameters:
+    # ---- 地图保存 ----
+    lio.map.save_map: true
+    # true：碎片存 0.5 m 体素滤波后的点，退出时再按 ds_size 降采样合并（碎片小、合并快）。
+    # false 会让碎片大 ~7.5 倍且 ds_size 不再生效；它只影响落盘的 map*.pcd，不影响实时 /map。
+    lio.map.if_filter: true
+    # ⚠ save_map_dir 是**后缀**，不是绝对路径！
+    #   源码里是 g_save_map_dir = g_root_dir + save_map_dir，而 g_root_dir 是编译期
+    #   宏 ROOT（指向 super_lio 的源码目录）。写绝对路径会被拼成
+    #   "<源码目录>//tmp/xxx" 这种烂路径，读写都失败（我踩过）。
+    #   "map" 即落在 <Super-LIO 源码目录>/map/，这也是上游的约定。
+    #   本工程实测解析为：
+    #     /home/demo/superlio_ws/Super-LIO-ros2/src/super_lio/map/map.pcd
+    lio.map.save_map_dir: "map"
+    # 探索产出单独命名：Super-LIO 退出时会覆盖 <map_name>，而重定位读的是 map.pcd，
+    # 共用同一个名字会让一次探索把先验地图冲掉。要拿探索图做重定位，手动改名/拷贝。
+    lio.map.map_name: "map_explore.pcd"
+    lio.map.ds_size: 0.15
+    lio.map.save_interval: 500        # 每 500 帧落一个分片到 PCD/，退出时合并
+
+    # ---- 输入 ----
+    lio.ros.lidar_topic: "/livox/lidar"
+    lio.ros.imu_topic: "/livox/imu"
+
+    # ---- 传感器 ----
+    lio.sensor.lidar_type: 1          # 1 = Livox（订阅 CustomMsg）
+    # 1.0 -> 0.4：1 m 以内的点在接收时就被丢弃，车靠近墙时墙会从
+    # /lio/cloud_world -> /scan 和局部代价地图里消失，规划器会误判可通行。
+    # 0.4 m 只过滤车体自身回波，墙在 0.4 m 以内才会消失。
+    lio.sensor.blind: 0.4
+    lio.sensor.maxrange: 60.0
+    lio.sensor.filter_rate: 3
+    lio.sensor.enable_downsample: true
+    lio.sensor.voxel_fliter_size: 0.5
+    lio.sensor.gravity_norm: 9.7946
+    lio.sensor.imu_type: 1
+    lio.sensor.imu_na: 0.1
+    lio.sensor.imu_ng: 0.1
+    lio.sensor.imu_nba: 0.0001
+    lio.sensor.imu_nbg: 0.0001
+
+    # ---- 外参 ----
+    # lidar_imu 是 MID-360 的出厂标定（上游给的默认值，不要乱改）
+    lio.extrinsic.lidar_imu: [-0.011, -0.02329, 0.04412,
+                              1.0, 0.0, 0.0,
+                              0.0, 1.0, 0.0,
+                              0.0, 0.0, 1.0]
+    lio.extrinsic.odom_robo: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    # ---- 局部地图 ----
+    lio.hash_map.hash_capacity: 2000000
+    lio.hash_map.vox_resolution: 0.5
+
+    # ---- 滤波器 ----
+    lio.kf.kf_type: 0
+    lio.kf.kf_max_iterations: 4
+    lio.kf.kf_align_gravity: true
+    lio.kf.kf_quit_eps: 0.001
+
+    # ---- 输出 ----
+    lio.output.robot: true
+    lio.output.plan_env_world: false
+    lio.output.plan_env_body: false
+    lio.output.ml_map: false
+    lio.output.planner: false
+    lio.output.map: true
+    lio.output.dense: true
+    lio.output.pub_step: 1
+
+    lio.eva.timer: true

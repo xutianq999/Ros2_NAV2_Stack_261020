@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>super_lio_bridge</name>
+  <version>0.1.0</version>
+  <description>
+    Bridges Super-LIO into this Nav2 stack: splits Super-LIO's single world -> imu TF
+    into the map -> odom -> base_footprint chain Nav2 needs, republishes its cloud as
+    /registered_scan, and publishes /localization/tracking_ok for the safety layer.
+    Talks to Super-LIO only over topics/TF (no headers, no linking), so Super-LIO's
+    GPLv3 does not affect this package and it builds without Super-LIO present.
+  </description>
+  <maintainer email="xutianq999@example.com">xutianq999</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-scipy</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

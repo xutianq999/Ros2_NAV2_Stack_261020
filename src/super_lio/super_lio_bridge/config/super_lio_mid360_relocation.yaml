@@ -1,0 +1,90 @@
+# Super-LIO 重定位配置（适配本工程）
+#
+# ⚠ 为什么必须用这份、而不是上游的 launch：
+#   上游 launch/relocation.py 加载的是 **config/livox_360.yaml**（建图那份），
+#   里面没有本文件这些 lio.relocation.* 参数，而仓库里明明提供了
+#   config/relocation.yaml。看起来是上游 launch 的笔误。
+#   所以本工程的启动文件直接起 relocation_node 并显式指定这份配置。
+#
+# 与建图配置的主要差异：
+#   - 加载先验地图 <save_map_dir>/<map_name>，建图那份完全不读地图
+#   - lio.relocation.init_pose 给初始猜测（也可运行时发 /initialpose 覆盖）
+#   - hash_map 容量放大、多了 submap 参数（要在既有地图上做配准）
+#   - odom_robo 的 z 有 0.13 的偏移，与建图配置不同（沿用上游值）
+
+/**:
+  ros__parameters:
+    # ---- 地图 ----
+    lio.map.save_map: false           # 重定位不写地图
+    lio.map.if_filter: true
+    # ⚠ save_map_dir 是**后缀**，会拼在编译期宏 ROOT（super_lio 源码目录）之后。
+    #   写绝对路径会被拼坏。先验地图最终读的是:
+    #     /home/demo/superlio_ws/Super-LIO-ros2/src/super_lio/map/map.pcd
+    #   也就是先用建图模式跑一次、让它把地图存到这里，再切重定位模式。
+    lio.map.save_map_dir: "map"
+    lio.map.map_name: "map.pcd"
+    lio.map.ds_size: 0.3
+    lio.map.save_interval: 500
+
+    # ---- 输入 ----
+    lio.ros.lidar_topic: "/livox/lidar"
+    lio.ros.imu_topic: "/livox/imu"
+
+    # ---- 传感器 ----
+    lio.sensor.lidar_type: 1
+    lio.sensor.blind: 0.3
+    lio.sensor.maxrange: 100.0
+    # ⚠ 必须是整数：节点把它声明成 <int>，写成 3.0 会在启动时抛
+    #   InvalidParameterTypeException 并直接 abort（SIGABRT）。
+    #   上游 config/relocation.yaml 写的正是 3.0 —— 那份开箱即崩，这大概也是
+    #   上游 launch/relocation.py 反而去加载建图配置的原因。
+    lio.sensor.filter_rate: 3
+    lio.sensor.enable_downsample: true
+    lio.sensor.voxel_fliter_size: 0.5
+    lio.sensor.gravity_norm: 9.7946
+    lio.sensor.imu_type: 1
+    lio.sensor.imu_na: 0.1
+    lio.sensor.imu_ng: 0.1
+    lio.sensor.imu_nba: 0.0001
+    lio.sensor.nbg: 0.0001
+
+    # ---- 外参 ----
+    lio.extrinsic.lidar_imu: [-0.011, -0.02329, 0.04412,
+                              1.0, 0.0, 0.0,
+                              0.0, 1.0, 0.0,
+                              0.0, 0.0, 1.0]
+    lio.extrinsic.odom_robo: [0.0, 0.0, 0.13, 0.0, 0.0, 0.0]
+
+    # ---- 局部地图（重定位要装下整张先验图，容量放大）----
+    lio.hash_map.hash_capacity: 100000000
+    lio.hash_map.vox_resolution: 0.5
+    # 注：上游 relocation.yaml 的 lio.hash_map.insert_resolution 不在节点的
+    # declare_parameter 列表里，设了也不生效，所以这里不写。
+
+    # ---- 滤波器 ----
+    lio.kf.kf_type: 0
+    lio.kf.kf_max_iterations: 4
+    lio.kf.kf_align_gravity: true
+    lio.kf.kf_quit_eps: 0.001
+
+    # ---- 子图 ----
+    lio.submap.submap_resolution: 0.5
+    lio.submap.submap_capacity: 1000000
+
+    # ---- 输出 ----
+    lio.output.robot: false
+    lio.output.plan_env_world: false
+    lio.output.plan_env_body: false
+    lio.output.ml_map: false
+    lio.output.planner: false
+    lio.output.map: true
+    lio.output.dense: true
+    lio.output.pub_step: 1
+
+    # ---- 重定位 ----
+    lio.relocation.update_map: true
+    # 初始猜测 [x, y, z, roll, pitch, yaw]。车放在地图原点附近时全 0 即可；
+    # 否则填大致位置，或启动后在 RViz / 网页用"初始位姿"发 /initialpose 覆盖。
+    lio.relocation.init_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    lio.eva.timer: true
